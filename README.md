@@ -37,8 +37,8 @@
   labels and tooltips throughout.
 - 🎨 **Feels native.** It follows your Herdr theme, light or dark, and your zoom, from a narrow side pane
   to a wide screen, and keeps up with hundreds of tabs.
-- 🔒 **Private by design.** No network, no programs, no telemetry. It only reads what Herdr already shows
-  you.
+- 🔒 **Private by design.** No network, no telemetry, nothing outside its own folder. It only reads what
+  Herdr already shows you.
 
 | Light theme | As a popup, over anything |
 |---|---|
@@ -156,8 +156,9 @@ A board tab also takes props, which win over config.json: `{"space": "Agents"}` 
 <summary><b>Privacy, data, rollout and support</b></summary>
 
 - **Privacy.** Tab finder reads only Herdr's own view of your spaces, tabs and agents, plus its two
-  optional files. It never reaches the network, runs programs, reads other files or sends telemetry. Its
-  only actions are selecting the tab you pick and saving its own state. See [SECURITY.md](SECURITY.md).
+  optional files. It never reaches the network, reads other files or sends telemetry. Its only actions
+  are selecting the tab you pick and saving its own state; the one program it can start is your system's
+  link opener, when you click its credit to open this page. See [SECURITY.md](SECURITY.md).
 - **Data.** Favorites, mutes, recent tabs and recent finishes live in Herdr's `shared.json` under
   `tabfinder.*`, on each computer. They don't sync between computers.
 - **Rollout.** The installers run unattended, are safe to rerun, and exit 0 (done), 1 (failed) or

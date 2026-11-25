@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/ibrahimawadhamid/herdr-tab-finder/security/advisories/new
+    about: Please report security problems privately, not in a public issue.
+  - name: Herdr itself
+    url: https://herdr.dev
+    about: Problems with Herdr rather than Tab finder belong to the Herdr project.

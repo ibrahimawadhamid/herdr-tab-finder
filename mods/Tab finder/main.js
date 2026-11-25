@@ -23,16 +23,18 @@
 //   notes.json   { "Tab name": "one line", "Space name / Tab name": "one line" }
 // Pane props (optional): { "space": "<space name or id>", "scope": "space" | "all", "title", "noun" }.
 // Favorites, mutes and recent tabs live in Herdr's shared state (keys "tabfinder.*"), so they follow you
-// across layouts. Nothing here reaches the network, runs programs or reads files outside this folder.
+// across layouts. Nothing here reaches the network or reads files outside this folder; the only program it
+// ever starts is the system's link opener, when you click the credit to open the project page.
 //
 // Made with ❤️ by Ibrahim Awad.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { spaces, agents, panes, terminals, machines, run, theme, props, appHome, readTextFile, checking,
-         shared, setShared, focused, closeOverlay, fonts, window, settings, placement, nextCommand } from "herdr";
+         shared, setShared, focused, closeOverlay, fonts, window, settings, placement, nextCommand, exec } from "herdr";
 
 export const VERSION = "1.0.0";
+export const REPO = "https://github.com/ibrahimawadhamid/herdr-tab-finder";
 
 // This mod's folder name, taken from where it was loaded, so a renamed copy (to avoid a name clash) still
 // finds its own files, icons and panes. Falls back to the published name.
@@ -572,14 +574,30 @@ export default class TabFinder extends View {
       .on_click((_e, cx) => { act(); cx.notify(); })
       .child(label);
   }
+  // Opens the project page in the browser, the way Herdr's own mods open links: the system's link
+  // opener, run only when this is clicked.
+  openRepo() {
+    if (checking()) return;
+    let platform = "";
+    try { platform = window().platform; } catch {}
+    const [cmd, args] = platform === "macos" ? ["open", [REPO]]
+      : platform === "windows" ? ["explorer", [REPO]]
+      : ["xdg-open", [REPO]];
+    try { exec(cmd, args).catch(() => {}); } catch {}
+  }
   credit(t) {
     const heart = t.ansi1 || t.blocked;
     return h_flex().id("tf-credit").flex_none().gap(5).items_center().px(10).py(3).rounded(14)
       .border_1().border_color(t.border)
+      .cursor_pointer().hover((st) => st.bg(t.hover).border_color(t.accent))
+      .role("link").accessibility_label("Made with love by Ibrahim Awad. Open Tab finder on GitHub")
+      .tooltip("Open Tab finder on GitHub: star it, report a bug or suggest an idea")
+      .on_click(() => this.openRepo())
       .child(div().text_size(11).text_color(t.dim).child("Made with"))
       .child(svg(ICON("heart")).size(11).text_color(heart))
       .child(div().text_size(11).text_color(t.dim).child("by"))
-      .child(div().text_size(11).font_semibold().text_color(t.muted).child("Ibrahim Awad"));
+      .child(div().text_size(11).font_semibold().text_color(t.muted).child("Ibrahim Awad"))
+      .child(svg(ICON("star")).size(11).text_color(t.dim));
   }
 
   render(cx) {

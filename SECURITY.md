@@ -6,8 +6,11 @@ of them:
 - It reads Herdr's view of your spaces, tabs, panes, agents and machines, and its own optional
   `config.json` and `notes.json`.
 - It writes only its own keys in Herdr's shared state (`tabfinder.*`).
-- Its only actions are selecting the space and tab you pick, and closing its own popup.
-- It never runs programs, reaches the network, or reads or writes other files.
+- Its only actions are selecting the space and tab you pick, closing its own popup, and opening the
+  project page when you click the credit.
+- It never reaches the network, or reads or writes other files. The one program it can start is your
+  system's link opener (`open`, `xdg-open` or `explorer`), and only when you click its "Made with ♥"
+  credit, to show the project page on GitHub.
 
 The installers copy files into Herdr's `mods` folder and, only when asked (`--bind`), add one line to
 `keys.json` after backing it up. In download mode they fetch the release archive from GitHub over HTTPS,

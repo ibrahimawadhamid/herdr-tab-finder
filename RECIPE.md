@@ -46,7 +46,9 @@ Top to bottom, inside the mod's block (24px padding on wide blocks, 14px under 5
 6. **Problems**, only when config.json or notes.json can't be used: one 11px line each in `blocked`,
    e.g. "config.json isn't valid JSON, so it is ignored (…)".
 7. **Footer**: a 10.5px `dim` tip ("Star a tab to keep it in Favorites (Ctrl+S). The bell mutes its new
-   output (Ctrl+M).", hidden when narrow) and a "Made with ♥ by Ibrahim Awad" pill (heart in `ansi1`).
+   output (Ctrl+M).", hidden when narrow) and a "Made with ♥ by Ibrahim Awad ☆" pill (heart in `ansi1`); clicking it opens the project's GitHub page,
+   with a hover highlight and the tooltip "Open Tab finder on GitHub: star it, report a bug or suggest
+   an idea".
 
 Empty states, in 12.5px `muted`: "No other tabs in this space yet. Open one and it shows up here.",
 "Nothing matches your search. Press Esc to clear it.", "No favorites yet. Click the star on a card to add
@@ -124,7 +126,9 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   `tabfinder.migrated` (a one-time copy of older `tabboard.*` favorites and recent tabs).
 - Art: its own 24px stroke icons (search, spinner, star, star-filled, bell, bell-off, loop, heart), all
   `currentColor`, drawn with `svg()` so they take the theme.
-- No programs, no network, no files outside its own folder.
+- No network and no files outside its own folder. Clicking the footer credit opens the project page with
+  the system's link opener (`exec`: `open` on macOS, `xdg-open` on Linux, `explorer` on Windows), as
+  Herdr's own mods open links; nothing else runs programs.
 
 ## Watch out
 
