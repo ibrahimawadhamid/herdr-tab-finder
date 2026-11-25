@@ -17,7 +17,8 @@ The first public release.
   reaches a board pane; key commands for keys.json.
 - Screen-reader labels, tooltips, light and dark themes, Herdr's zoom, narrow panes, floating blocks.
 - Pages of 100 cards, so hundreds of tabs stay within Herdr's render budget.
-- Optional config.json and notes.json, with invalid files reported on the board.
+- Optional config.json (global name and icons; a title and noun per space) and notes.json, with invalid
+  files reported on the board.
 - Installers for macOS and Linux (install.sh) and Windows (install.ps1): unattended, rerunnable,
   uninstall, version pinning and mirrors.
 - Earlier private builds kept favorites under `tabboard.*`; they are copied to `tabfinder.*` once.

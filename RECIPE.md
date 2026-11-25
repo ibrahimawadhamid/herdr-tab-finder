@@ -15,9 +15,9 @@ Top to bottom, inside the mod's block (24px padding on wide blocks, 14px under 5
 
 1. **Header row**, wrapping when narrow. On the left, a greeting in 12px `dim` ("Good morning", "Good
    afternoon", "Good evening", "Working late" before 5:00, with ", Name" when config.json has `name`). Under
-   it the title in 22px bold `foreground`: the space's name, or config.json `title`, or "All your tabs"
+   it the title in 22px bold `foreground`: the space's name, or the board's own title, or "All your tabs"
    when showing every space; beside it a count pill (11.5px `muted` on `raised`, radius 10): "12 tabs"
-   (or config.json `noun`: "12 agents"), plus "· on build-box" for a space on another machine. On the
+   (or the board's noun: "12 agents"), plus "· on build-box" for a space on another machine. On the
    right, pills (11.5px, radius 14, 1px border): "● N need(s) your input" in `blocked`, "N working" in
    `working` (each only when nonzero), "★ Favorites", and "Show all spaces" / "Showing all spaces" in a
    pane, or "This space only" in the popup. An active pill gets an `accent` border and `accent` at 13% behind it.
@@ -99,11 +99,15 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   board pane; it is opened as a popup with
   `mod.open {name: "Tab finder"}` or put in a tab with `tab.new {mod: "Tab finder", props}`.
 - Props (optional): `space` (a space name or id to show; default: the space shown when the copy first
-  appeared, remembered in localStorage) and `scope` (`"all"` to start with every space). In the popup
+  appeared, remembered in localStorage), `scope` (`"all"` to start with every space), `title` and
+  `noun` (this board's words). In the popup
   (`props().overlay` set) it always shows every space.
 - Optional files beside main.js, read once per load with `readTextFile` from
-  `appHome()/mods/<its folder>/`: `config.json` (`title`, `name`, `space`, `noun`, `icons`: `auto`,
-  `emoji` or `letters`) and `notes.json` (`"Tab name"` or `"Space / Tab"` → one line).
+  `appHome()/mods/<its folder>/`: `config.json` (global `name` and `icons`: `auto`, `emoji` or
+  `letters`; per board, `spaces: { "<space name or id>": { title, noun } }`, `noun` a word or a
+  `[singular, plural]` pair) and `notes.json` (`"Tab name"` or `"Space / Tab"` → one line). A board's
+  words come from its props, then its space's entry; older top-level `title`/`noun` apply only to the
+  top-level `space` they name.
 - `herdr`: `spaces()`, `panes()`, `agents()`, `terminals()` (each terminal's `parent`, to count
   sub-agents in a tab), `machines()`, `focused()`, `theme()`, `settings()` (zoom), `window()` and
   `fonts()` (emoji or letters), `placement()` (a floating block), `nextCommand()` (`focus` from
@@ -123,6 +127,9 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
 - No programs, no network, no files outside its own folder.
 
 ## Watch out
+
+- **Board words are per board.** One mod folder serves every board, so a title or noun in config.json
+  must name its space; a global one would leak into every other board.
 
 - **The folder name is the pane title.** Herdr's pane header shows the mod's folder name, which is why the
   folder is "Tab finder" and not a slug. Keep the space: `mod.open:Tab finder` in keys.json works with it.

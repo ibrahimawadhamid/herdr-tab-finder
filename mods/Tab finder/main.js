@@ -18,9 +18,10 @@
 //
 // Optional files next to this one (Herdr reloads the board when you save them; a file that isn't valid
 // JSON is ignored and named in red at the bottom of the board):
-//   config.json  { "title", "name", "space", "noun", "icons": "auto" | "emoji" | "letters" }   all optional
+//   config.json  { "name", "icons": "auto" | "emoji" | "letters",
+//                  "spaces": { "<space name or id>": { "title", "noun": "agent" | ["person", "people"] } } }
 //   notes.json   { "Tab name": "one line", "Space name / Tab name": "one line" }
-// Pane props (optional): { "space": "<space name or id>", "scope": "space" | "all" }.
+// Pane props (optional): { "space": "<space name or id>", "scope": "space" | "all", "title", "noun" }.
 // Favorites, mutes and recent tabs live in Herdr's shared state (keys "tabfinder.*"), so they follow you
 // across layouts. Nothing here reaches the network, runs programs or reads files outside this folder.
 //
@@ -140,6 +141,7 @@ function subseq(q, s) { let i = 0; for (const c of s) if (c === q[i]) i++; retur
 export default class TabFinder extends View {
   init(_props, cx) {
     const p = props() || {};
+    this.props = p;
     this.overlay = p.overlay ?? null;
     this.filter = "";
     this.chip = "all";
@@ -204,9 +206,6 @@ export default class TabFinder extends View {
       };
       this.notes = await read("notes.json");
       this.config = await read("config.json");
-      if (typeof this.config.space === "string" && this.config.space && !(typeof p.space === "string" && p.space) && !this.overlay) {
-        this.home = this.config.space;
-      }
       cx.notify();
     });
   }
@@ -403,10 +402,27 @@ export default class TabFinder extends View {
         if (ts.length) out.push({ title: sp.name + where, tabs: ts });
       }
     } else {
-      const noun = this.config.noun;
-      out.push({ title: typeof noun === "string" && noun ? `All ${noun}s` : "All tabs", tabs: [...pool].sort(this.byLabel(s)) });
+      const [, many] = this.custom(s.home).noun;
+      out.push({ title: `All ${many}`, tabs: [...pool].sort(this.byLabel(s)) });
     }
     return out;
+  }
+
+  // This board's own words, for the space it shows: its props first, then config.json's "spaces"
+  // section for that space (by name or id). Older configs kept "title" and "noun" at the top next to the
+  // "space" they were meant for; those apply to that space only, never to other boards.
+  custom(sp) {
+    const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : "");
+    const noun = (v) => (Array.isArray(v) && str(v[0]) ? [str(v[0]), str(v[1]) || `${str(v[0])}s`] : str(v) ? [str(v), `${str(v)}s`] : null);
+    const c = this.config || {};
+    const per = c.spaces && typeof c.spaces === "object" && !Array.isArray(c.spaces) ? c.spaces : {};
+    const mine = sp ? per[sp.id] || per[sp.name] || {} : {};
+    const legacy = sp && str(c.space) && (str(c.space) === sp.name || str(c.space) === sp.id) ? c : {};
+    const p = this.overlay ? {} : this.props || {};
+    return {
+      title: str(p.title) || str(mine.title) || str(legacy.title),
+      noun: noun(p.noun) || noun(mine.noun) || noun(legacy.noun) || ["tab", "tabs"],
+    };
   }
 
   // The card Enter opens: the one picked with the arrows, else the first while searching or in the popup.
@@ -651,10 +667,10 @@ export default class TabFinder extends View {
     try { floating = !!placement(); } catch {}
     const sized = !!this.overlay || floating;
 
-    const noun = this.scope === "space" && typeof this.config.noun === "string" && this.config.noun ? this.config.noun : "tab";
-    const count = plural(all.length, noun);
+    const mine = this.custom(this.scope === "space" ? sp : null);
+    const count = plural(all.length, mine.noun[0], mine.noun[1]);
     const title = this.scope === "all" || !sp ? "All your tabs"
-      : (!this.overlay && typeof this.config.title === "string" && this.config.title) || sp.name;
+      : mine.title || sp.name;
     const chip = (c) => () => { this.chip = this.chip === c ? "all" : c; this.sel = null; this.page = 0; };
 
     const pills = h_flex().gap(8).items_center().flex_wrap()

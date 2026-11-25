@@ -117,19 +117,28 @@ the cursor in the search box. `pane.go` also moves onto a board pane.
 Both files are optional. Put them next to `main.js` in `mods/Tab finder/`; Herdr reloads the board when
 you save, and updates never touch them. If one isn't valid JSON, the board says so in red and carries on.
 
-**`config.json`**
+**`config.json`**: a few settings for every board, and words for the board of a particular space.
 
 ```json
-{ "title": "Find an agent", "name": "Sam", "space": "Agents", "noun": "agent", "icons": "auto" }
+{
+  "name": "Sam",
+  "icons": "auto",
+  "spaces": {
+    "Agents": { "title": "Find an agent", "noun": "agent" },
+    "Support": { "noun": ["person", "people"] }
+  }
+}
 ```
 
 | Field | What it does | Default |
 |---|---|---|
-| `title` | The heading of a board tab | the space's name |
 | `name` | Adds your name to the greeting | none |
-| `space` | Which space a board tab shows | the space it was opened in |
-| `noun` | What to call tabs: "12 agents", "All agents" | "tab" |
 | `icons` | `"emoji"` (🚀 release, 🔧 fix, 📚 docs, …) or `"letters"` | `"auto"`: emoji where an emoji font is installed |
+| `spaces` → `title` | The heading of that space's board | the space's name |
+| `spaces` → `noun` | What that board calls its tabs: `"agent"` gives "12 agents"; `["person", "people"]` for irregular plurals | "tab" |
+
+Spaces are matched by name or id, and only that space's board uses its words; every other board stays
+generic.
 
 **`notes.json`**: one line per tab, shown under its name and searchable. Use `"Space / Tab"` when two
 spaces have a tab with the same name.
@@ -138,8 +147,8 @@ spaces have a tab with the same name.
 { "Orchestrator": "Runs the checkout redesign team", "Data pipeline / Backfill": "Rerun on Fridays" }
 ```
 
-A board tab also takes props: `{"space": "Agents"}` pins a space, `{"scope": "all"}` starts with every
-space.
+A board tab also takes props, which win over config.json: `{"space": "Agents"}` pins a space,
+`{"scope": "all"}` starts with every space, and `"title"` and `"noun"` set that one board's words.
 
 ## For teams and companies
 
