@@ -17,7 +17,7 @@ jobs:
     name: Mod loads in Herdr (Linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Package holds no personal files
         run: |
           for f in config.json notes.json; do
@@ -42,7 +42,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: shellcheck
         if: runner.os == 'Linux'
         run: shellcheck -s sh install.sh
@@ -71,7 +71,7 @@ jobs:
     name: install.ps1 (Windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
