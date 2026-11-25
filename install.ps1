@@ -26,7 +26,7 @@ param(
   [string]$Url = ""
 )
 $ErrorActionPreference = "Stop"
-$TfVersion = "1.1.0"
+$TfVersion = "1.1.1"
 $Repo = "ibrahimawadhamid/herdr-tab-finder"
 $Marker = "Tab finder for Herdr"
 

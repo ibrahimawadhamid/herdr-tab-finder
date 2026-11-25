@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 (2026-11-25)
+
+- Agent-neutral throughout: the screenshots and demo show a mixed fleet (Codex, Gemini, OpenCode, Cursor,
+  Copilot, Goose, Amp, Claude Code and plain terminals), the examples use generic agents, and a tab named
+  "agent", "assistant" or "bot" gets a 🤖 tile instead of one agent's mark.
+
 ## 1.1.0 (2026-11-25)
 
 - **The credit opens the project.** Click "Made with ♥ by Ibrahim Awad" to open Tab finder on GitHub,
@@ -30,8 +36,8 @@ The first public release.
 - Quiet by design: only tabs that need your input are highlighted. A finished agent gets a small "New
   output" mark; tabs that finish 3 or more times within an hour are marked "On a loop"; a bell mutes any
   tab.
-- Cards are named exactly as Herdr's tab bar names tabs, so several "Claude Code" tabs from the + menu read
-  as what each agent is doing, with the agent's own status message underneath.
+- Cards are named exactly as Herdr's tab bar names tabs, so several tabs started from the same agent in the
+  + menu read as what each agent is doing, with the agent's own status message underneath.
 - Search across names, tasks, notes, spaces and machines, ignoring case and accents, with a fuzzy
   fallback.
 - Favorites, recent tabs, status filters, every space or one, other machines and offline ones.

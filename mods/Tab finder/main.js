@@ -33,7 +33,7 @@ import { v_flex, h_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { spaces, agents, panes, terminals, machines, run, theme, props, appHome, readTextFile, checking,
          shared, setShared, focused, closeOverlay, fonts, window, settings, placement, nextCommand, exec } from "herdr";
 
-export const VERSION = "1.1.0";
+export const VERSION = "1.1.1";
 export const REPO = "https://github.com/ibrahimawadhamid/herdr-tab-finder";
 
 // This mod's folder name, taken from where it was loaded, so a renamed copy (to avoid a name clash) still
@@ -76,7 +76,7 @@ const ICONS = [
   [/\b(customer|support|cs\b)/i, "💬"], [/\b(docs?\b|documentation|readme|wiki|writ)/i, "📚"], [/\b(review|pr\b|pull request)/i, "👀"],
   [/\b(front|ui\b|ux\b|design|css\b)/i, "🎨"], [/\b(backend|api\b|server|service)/i, "🧩"], [/\b(research|investig|explor)/i, "🔎"],
   [/\b(plan|roadmap|spec\b|specs\b)/i, "🗺️"], [/\b(chat|slack|discord)/i, "💬"], [/\b(shell|terminal|zsh|bash)/i, "⌨️"],
-  [/\b(build|compile)/i, "🏗️"], [/\b(claude|agent|assistant)/i, "✳️"],
+  [/\b(build|compile)/i, "🏗️"], [/\b(agents?|assistant|bots?)\b/i, "🤖"],
 ];
 
 const hash = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);

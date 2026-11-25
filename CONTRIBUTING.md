@@ -44,7 +44,7 @@ when it prints an OSC 7501 report; fields are colon-separated, and `msg` and `ti
 
 ```sh
 # a tab whose agent is working and says what it's doing
-herdr-app do tab.new "{\"name\":\"Demo\",\"argv\":[\"sh\",\"-c\",\"printf '\\\\033]7501;state=working:app=claude-code:msg=$(printf 'Refactoring auth' | base64)\\\\033\\\\\\\\'; sleep 9999\"]}"
+herdr-app do tab.new "{\"name\":\"Demo\",\"argv\":[\"sh\",\"-c\",\"printf '\\\\033]7501;state=working:app=codex:msg=$(printf 'Refactoring auth' | base64)\\\\033\\\\\\\\'; sleep 9999\"]}"
 ```
 
 States are `working`, `blocked` (add `:kind=question`), `done` and `idle`. Use made-up names only in

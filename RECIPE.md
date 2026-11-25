@@ -89,9 +89,9 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   star and bell are labelled buttons with tooltips.
 
 - **Names follow Herdr's tab bar.** A name you typed stays. A tab Herdr named (unnamed, or named after
-  its program, as the + menu's "Claude Code" or "OpenCode" entries do) shows its agent's live title when
+  its program, as the + menu's agent entries do: "Codex", "Gemini", "OpenCode", "Claude Code" and so on) shows its agent's live title when
   that says something (not a path, an address, `user@host` or the program's own name); otherwise its
-  program ("tail", "bash") or "Terminal". So several "Claude Code" tabs read as what each one is doing.
+  program ("tail", "bash") or "Terminal". So several tabs started from the same agent entry read as what each one is doing.
 
 ## Built from
 
@@ -171,7 +171,7 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   `changed_at` while it stays done, and a remote machine's clock may differ.
 - **Emoji tiles** need an emoji font. `icons: "auto"` uses emoji on macOS and Windows, and on Linux only
   when a font with "emoji" in its name is installed; otherwise letters.
-- **Faking an agent for tests:** OSC 7501 is `ESC ] 7501 ; state=working:app=claude-code:msg=<base64>
+- **Faking an agent for tests:** OSC 7501 is `ESC ] 7501 ; state=working:app=codex:msg=<base64>
   ESC \`. Fields are colon-separated; `msg` and `title` are base64 (a plain-text `msg` is dropped).
 - **Keys.** ctrl-shift-e is Herdr's default for splitting down on Linux, so the suggested key is
   ctrl-shift-g (free in Herdr 0.1.18), or cmd-e on macOS. Editing keys.json makes it yours: Herdr stops
@@ -190,7 +190,7 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   "New output" on another tab.
 - With 250 tabs in a space, the board renders, shows "Page 1 of 3", and Down past the last row opens page
   2.
-- Two tabs made from the + menu's "Claude Code" entry show their agents' live titles, matching the tab
+- Two tabs made from the same agent entry in the + menu (say "Codex") show their agents' live titles, matching the tab
   bar, and each agent's status message underneath.
 - Tabs named "Task 2" and "Task 10" sort in that order; "cafe" finds "Café menu".
 - Ctrl+S on the selected card adds it to Favorites (filled star); Ctrl+M crosses out its bell.

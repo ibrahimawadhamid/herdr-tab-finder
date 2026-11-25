@@ -22,6 +22,9 @@
 
 ## Why you'll like it
 
+Works with every agent Herdr runs (Claude Code, Codex, Gemini, OpenCode, Cursor, Copilot, Goose, Amp, Pi
+and more) and with plain terminals, side by side.
+
 - 🔎 **Find anything in a keystroke.** Press one key from anywhere, type a few letters, hit Enter. It
   searches tab names, what each agent is doing, your notes, spaces and machines, ignores accents, and
   finds "Changelog" from just "chlg".
@@ -162,7 +165,7 @@ A board tab also takes props, which win over config.json: `{"space": "Agents"}` 
 - **Data.** Favorites, mutes, recent tabs and recent finishes live in Herdr's `shared.json` under
   `tabfinder.*`, on each computer. They don't sync between computers.
 - **Rollout.** The installers run unattended, are safe to rerun, and exit 0 (done), 1 (failed) or
-  2 (bad option). Pin a version with `TAB_FINDER_REF=v1.1.0` (`-Ref`), install from an internal mirror
+  2 (bad option). Pin a version with `TAB_FINDER_REF=v1.1.1` (`-Ref`), install from an internal mirror
   with `TAB_FINDER_URL=https://…/tab-finder.tar.gz` (`-Url`), choose another folder name with
   `TAB_FINDER_NAME` (`-Name`), and point at a custom Herdr folder with `HERDR_APP_HOME` (`-AppHome`).
 - **Quality.** Every change, and every Monday against the newest Herdr, CI loads the mod in Herdr and
