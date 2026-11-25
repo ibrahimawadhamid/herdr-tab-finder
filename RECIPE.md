@@ -1,9 +1,10 @@
 # Tab finder
 
-A searchable board of your Herdr tabs as cards, for people who run many agents at once. Each card shows a
-tab's name, what its agent is working on, and its live status. Only tabs that need your input are
-highlighted, so agents on a loop don't bury the ones that do. It lives as a tab (the tabs of its space, or
-every space with one click) or opens as a popup over anything with one key, and closes when you pick a tab.
+Every agent at a glance, and only the ones that need you lit up. Tab finder is a searchable board of
+your Herdr tabs as cards: each shows the tab's name as the tab bar does, what its agent says it is doing,
+and its live status. Tabs waiting for your answer get a red border and go to the top; finished work gets
+a quiet mark; agents on a loop never nag. Keep it as a tab, or press one key to open it over anything,
+type a few letters and land on the tab.
 
 ![Tab finder](preview.png)
 
@@ -34,9 +35,9 @@ Top to bottom, inside the mod's block (24px padding on wide blocks, 14px under 5
    in one of eight hues picked by a hash of the name (#5b8def #22a99a #e3814f #8b7cf6 #3fae6a #d9649a
    #c9a227 #4fb3d9) at 15% fill and 33% border, holding an emoji matched from the name (🚀 release, 🔧
    fix or bug, 🧭 orchestrator, 📚 docs, 🧪 test, …) or the name's first letter in the hue. Middle, three
-   lines: the name (13.5px semibold `foreground`, plus an "On a loop" badge with a loop icon, 10px `muted`
-   on `raised`), a subtitle (11.5px `muted`: the tab's note, else what its agent is doing, else "zsh in
-   repo · branch"), and a status line (11px) after an 8px dot or a 10px spinner, with "· 4 agents", "· 2
+   lines: the name, exactly as Herdr's tab bar shows it (13.5px semibold `foreground`, plus an "On a loop" badge with a loop icon, 10px `muted`
+   on `raised`), a subtitle (11.5px `muted`: the tab's note, else the agent's own status message, else its
+   live title, else "tail in repo · branch"), and a status line (11px) after an 8px dot or a 10px spinner, with "· 4 agents", "· 2
    panes", or the space name when cards come from several spaces. Right, stacked: a 14px star (hollow
    `dim`, filled `ansi3` when a favorite) and, on tabs that finish on their own, a 14px bell (crossed out
    when muted).
@@ -85,6 +86,11 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   subtitle and status, selected and announced as the active one while the search box keeps the keyboard;
   star and bell are labelled buttons with tooltips.
 
+- **Names follow Herdr's tab bar.** A name you typed stays. A tab Herdr named (unnamed, or named after
+  its program, as the + menu's "Claude Code" or "OpenCode" entries do) shows its agent's live title when
+  that says something (not a path, an address, `user@host` or the program's own name); otherwise its
+  program ("tail", "bash") or "Terminal". So several "Claude Code" tabs read as what each one is doing.
+
 ## Built from
 
 - One mod, `mods/Tab finder/` (`main.js`, `mod.json`, `icons/*.svg`). `mod.json`:
@@ -104,6 +110,9 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   `pane.go`; `favorite`, `mute`, `clear`, `focus` from keys.json's `"mod:Tab finder"` section),
   `shared`/`setShared`, `run("space.select")`, `run("tab.select")`, `closeOverlay`, `checking()`. Each
   list read is guarded, so a missing one leaves its part empty instead of breaking the board.
+- Agent messages: `terminals()` gives each agent's OSC 7501 report (`report`, or `status` as an object
+  in older versions); its `msg` (sent base64-encoded by the agent, decoded by herdr-core) is the subtitle.
+  The tab's lead pane is its agent pane, else its first terminal, else any pane.
 - `gpui-base`: `InputState`/`Input` for search, `ScrollHandle` to scroll the selected card into view.
 - Shared state: `tabfinder.favorites`, `tabfinder.recent` (last 12), `tabfinder.muted`,
   `tabfinder.popup.scope` (`"all"` or `"space"`),
@@ -146,6 +155,8 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   output" disappears then; loop detection counts only finishes seen while Herdr runs.
 - **Emoji tiles** need an emoji font. `icons: "auto"` uses emoji on macOS and Windows, and on Linux only
   when a font with "emoji" in its name is installed; otherwise letters.
+- **Faking an agent for tests:** OSC 7501 is `ESC ] 7501 ; state=working:app=claude-code:msg=<base64>
+  ESC \`. Fields are colon-separated; `msg` and `title` are base64 (a plain-text `msg` is dropped).
 - **Keys.** ctrl-shift-e is Herdr's default for splitting down on Linux, so the suggested key is
   ctrl-shift-g (free in Herdr 0.1.18), or cmd-e on macOS. Editing keys.json makes it yours: Herdr stops
   adding new default shortcuts to it.
@@ -163,6 +174,8 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   "New output" on another tab.
 - With 250 tabs in a space, the board renders, shows "Page 1 of 3", and Down past the last row opens page
   2.
+- Two tabs made from the + menu's "Claude Code" entry show their agents' live titles, matching the tab
+  bar, and each agent's status message underneath.
 - Tabs named "Task 2" and "Task 10" sort in that order; "cafe" finds "Café menu".
 - Ctrl+S on the selected card adds it to Favorites (filled star); Ctrl+M crosses out its bell.
 - An invalid config.json shows a red line at the bottom; the board still works.

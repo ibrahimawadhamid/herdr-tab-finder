@@ -256,17 +256,23 @@ export default class TabFinder extends View {
     const boards = new Set(allPanes.filter((x) => x.mod === SELF).map((x) => x.tab));
     const home = all.find((s) => s.id === this.home) || all.find((s) => s.name === this.home) || null;
     // First pane of each tab (a terminal when there is one): its program, folder and branch.
+    // Each tab's lead pane, as Herdr's tab bar picks it: its agent, else its first terminal, else any pane.
+    const rank = (x) => (x.program && x.program.agent ? 2 : x.terminal ? 1 : 0);
     const paneOf = new Map();
     for (const x of allPanes) {
       const had = paneOf.get(x.tab);
-      if (!had || (!had.terminal && x.terminal)) paneOf.set(x.tab, x);
+      if (!had || rank(x) > rank(had)) paneOf.set(x.tab, x);
     }
     // Agents per tab, and the helpers they started (sub-agents), counted once.
     const byTab = new Map();
     for (const a of safe(agents)) { if (!byTab.has(a.tab)) byTab.set(a.tab, []); byTab.get(a.tab).push(a); }
     const kids = new Map();
+    // What each agent says it is doing (its OSC 7501 message), by terminal address.
+    const said = new Map();
     for (const t of safe(terminals)) {
       if (t.state === "live" && t.parent) { if (!kids.has(t.parent)) kids.set(t.parent, []); kids.get(t.parent).push(t.address); }
+      const r = t.report && typeof t.report === "object" ? t.report : t.status && typeof t.status === "object" ? t.status : null;
+      if (r && typeof r.msg === "string" && r.msg.trim()) said.set(t.address, r.msg.trim());
     }
     const team = (addr, seen) => (kids.get(addr) || []).reduce((n, k) => (seen.has(k) ? n : (seen.add(k), n + 1 + team(k, seen))), 0);
     const info = new Map();
@@ -291,7 +297,7 @@ export default class TabFinder extends View {
     const memo = { label: new Map(), sub: new Map(), key: new Map() };
     let front = null;
     try { front = (focused() || {}).tab || null; } catch {}
-    return { all, boards, home, paneOf, info, items, favs, recent, away, loops, muted, finished, memo, front };
+    return { all, boards, home, paneOf, said, info, items, favs, recent, away, loops, muted, finished, memo, front };
   }
 
   // Label, subtitle and sort key are worked out once per tab per render (hundreds of tabs sort quickly).
@@ -300,14 +306,27 @@ export default class TabFinder extends View {
     if (v === undefined) { v = this.labelOf(s, tab); s.memo.label.set(tab.id, v); }
     return v;
   }
+  // The agent's live title when it says something useful, as Herdr's tab bar judges it: not a path, an
+  // address, user@host or the program's own name.
+  liveTitle(lead) {
+    if (!lead || !lead.program || !lead.program.agent) return "";
+    const live = cleanTitle(lead.title);
+    const raw = (lead.title || "").replace(/^[^\p{L}\p{N}~/]+/u, "");
+    const path = /^[~/]|^[A-Za-z]:\\/.test(raw);
+    const prog = lead.program.name;
+    return live && live !== lead.terminal && live !== prog && !path && !live.includes("@")
+      && live.toLowerCase() !== String(lead.program.key || "").toLowerCase() ? live : "";
+  }
+  // The same name Herdr's tab bar shows: a name you gave stays; a tab Herdr named (unnamed, or named
+  // after its program, as the + menu does) follows its agent's live title.
   labelOf(s, tab) {
+    const lead = s.paneOf.get(tab.id);
+    const prog = lead && lead.program ? lead.program.name : "";
+    const live = this.liveTitle(lead);
+    if ((!tab.named || tab.name === prog) && live) return live;
     if (tab.named) return tab.name;
-    const i = s.info.get(tab.id);
-    const pane = s.paneOf.get(tab.id);
-    if (i && i.title) return i.title;
-    if (pane && pane.terminal) return base(pane.cwd) || pane.program?.name || `Tab ${tab.index}`;
-    if (pane && pane.mod) return pane.title || pane.mod;
-    return `Tab ${tab.index}`;
+    if (lead && lead.mod) return lead.title || lead.mod;
+    return prog || "Terminal";
   }
   note(tab) {
     const n = this.notes[`${tab.space.name} / ${tab.name}`] ?? this.notes[tab.name];
@@ -318,15 +337,20 @@ export default class TabFinder extends View {
     if (v === undefined) { v = this.subtitleOf(s, tab); s.memo.sub.set(tab.id, v); }
     return v;
   }
+  // Under the name: your note, else what the agent says it is doing, else its live title, else the
+  // program and where it runs.
   subtitleOf(s, tab) {
     const n = this.note(tab);
     if (n) return n;
-    const i = s.info.get(tab.id);
-    if (i && i.title && tab.named && i.title !== tab.name) return i.title;
-    const pane = s.paneOf.get(tab.id);
-    if (!pane || !pane.terminal) return "";
-    const where = [base(pane.cwd), pane.branch].filter(Boolean).join(" · ");
-    const prog = pane.program?.name || "";
+    const name = this.label(s, tab);
+    const lead = s.paneOf.get(tab.id);
+    const msg = lead && lead.terminal ? s.said.get(lead.terminal) : "";
+    if (msg && msg !== name) return msg;
+    const live = this.liveTitle(lead);
+    if (live && live !== name) return live;
+    if (!lead || !lead.terminal) return "";
+    const where = [base(lead.cwd), lead.branch].filter(Boolean).join(" · ");
+    const prog = lead.program && lead.program.name !== name ? lead.program.name : "";
     return [prog, where && `in ${where}`].filter(Boolean).join(" ");
   }
   // "done" that deserves a mark: not muted and not on a loop.
