@@ -64,8 +64,11 @@ keys_edit() {
 import json, os, sys
 path, key, action, mode = os.environ["KEYS"], os.environ["KEY"], os.environ["ACTION"], os.environ["MODE"]
 path = os.path.realpath(path)  # a keys.json that links elsewhere (dotfiles) is edited where it lives
-with open(path, encoding="utf-8") as f:
-    keys = json.load(f)
+try:
+    with open(path, encoding="utf-8") as f:
+        keys = json.load(f)
+except ValueError as e:
+    sys.exit(f"keys.json isn't valid JSON ({e}); leaving it alone")
 if not isinstance(keys, dict):
     sys.exit("keys.json isn't an object; leaving it alone")
 if mode == "remove":
@@ -106,6 +109,7 @@ edit_keys() {
   n=1; while [ -e "$backup" ]; do n=$((n + 1)); backup="$keys.bak-tabfinder-$(date +%Y%m%d%H%M%S)-$n"; done
   cp "$keys" "$backup"
   rc=0; keys_edit "$1" || rc=$?
+  if [ "$1" = add ] && { [ "$rc" = 0 ] || [ "$rc" = 3 ]; }; then bound=true; fi
   if [ "$rc" = 0 ]; then
     say "keys.json was backed up to $backup."
     [ "$1" = add ] && say "Note: once keys.json is edited, Herdr treats it as yours and stops adding new default shortcuts to it."
@@ -190,11 +194,13 @@ if [ -n "$checker" ]; then
   else say "Warning: herdr-app check didn't pass. Run: herdr-app check \"$dest\""; fi
 fi
 
+bound=false
 [ "$bind" = true ] && edit_keys add
 
 say ""
 say "Done. Tab finder $VERSION is installed. To use it:"
-if [ "$bind" = true ]; then say "  * Press $key anywhere in Herdr for the popup."
+if [ "$bound" = true ]; then say "  * Press $key anywhere in Herdr for the popup."
+elif [ "$bind" = true ]; then say "  * The shortcut wasn't added (see above); add one to keys.json yourself, or use:"
 else say "  * For a shortcut, run: sh install.sh --bind   (adds $key, only if it's free)"; fi
 say "  * Or keep it as a tab:  herdr-app do tab.new '{\"name\":\"Find a tab\",\"mod\":\"$name\"}'"
 say "  * Or open it once:      herdr-app do mod.open '{\"name\":\"$name\"}'"

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The installers only say "Press <key>" when the shortcut is really in place. If keys.json is missing,
+  isn't valid JSON, or the key is taken, they say so plainly and point to the other ways to open it.
+
 ## 1.1.1 (2026-11-25)
 
 - Agent-neutral throughout: the screenshots and demo show a mixed fleet (Codex, Gemini, OpenCode, Cursor,

@@ -89,7 +89,7 @@ function Edit-KeyBinding([string]$Mode) {
       if ($section.Value -isnot [psobject]) { continue }
       $hit = $section.Value.PSObject.Properties[$Key]
       if ($hit) {
-        if ($hit.Value -eq $Action) { Say "$Key already opens Tab finder."; return }
+        if ($hit.Value -eq $Action) { Say "$Key already opens Tab finder."; $script:Bound = $true; return }
         Say "$Key is already used for '$($hit.Value)' ($($section.Name)); leaving keys.json alone. Pick another key and add `"<key>`": `"$Action`" to `"global`" yourself."
         return
       }
@@ -98,6 +98,7 @@ function Edit-KeyBinding([string]$Mode) {
     $data.global | Add-Member -NotePropertyName $Key -NotePropertyValue $Action
     Say "Added $Key to open Tab finder."
     $changed = $true
+    $script:Bound = $true
   }
   if (-not $changed) { return }
   $stamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -197,6 +198,7 @@ try {
     finally { $env:HERDR_APP_HOME = $old; $ErrorActionPreference = $eap }
   }
 
+  $script:Bound = $false
   if ($Bind) { Edit-KeyBinding "add" }
 } finally {
   if ($Tmp) { Remove-Item -LiteralPath $Tmp -Recurse -Force -ErrorAction SilentlyContinue }
@@ -204,7 +206,8 @@ try {
 
 Say ""
 Say "Done. Tab finder $TfVersion is installed. To use it:"
-if ($Bind) { Say "  * Press $Key anywhere in Herdr for the popup." }
+if ($script:Bound) { Say "  * Press $Key anywhere in Herdr for the popup." }
+elseif ($Bind) { Say "  * The shortcut wasn't added (see above); add one to keys.json yourself, or use:" }
 else { Say "  * For a shortcut, run: .\install.ps1 -Bind   (adds $Key, only if it's free)" }
 Say "  * Or keep it as a tab:  herdr-app do tab.new '{`"name`":`"Find a tab`",`"mod`":`"$Name`"}'"
 Say "  * Or open it once:      herdr-app do mod.open '{`"name`":`"$Name`"}'"
