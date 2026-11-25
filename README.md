@@ -67,6 +67,16 @@ curl -fsSL https://raw.githubusercontent.com/ibrahimawadhamid/herdr-tab-finder/m
 
 That's it. Press **cmd-e** on macOS or **ctrl-shift-g** on Linux and Windows, anywhere in Herdr.
 
+> [!TIP]
+> **Want it as a tab in a space?** You install Tab finder once per computer, and every space can use it.
+> To keep a board open as a tab, run this in a terminal of that space:
+>
+> ```sh
+> herdr-app do tab.new '{"name":"Find a tab","mod":"Tab finder"}'
+> ```
+>
+> It shows that space's tabs and stays open; "Show all spaces" widens it to everything.
+
 `--bind` adds that shortcut only if the key is free, after backing up `keys.json`. Leave it out to
 install without one. The installers never overwrite your own settings, and running them again updates
 Tab finder in place. Needs the Herdr app 0.1.16 or later.
