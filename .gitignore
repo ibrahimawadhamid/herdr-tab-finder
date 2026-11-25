@@ -1,0 +1,7 @@
+# Personal files: never commit them.
+mods/*/config.json
+mods/*/notes.json
+# Written by Herdr into installed copies.
+mods/*/jsconfig.json
+mods/*/*.d.ts
+.DS_Store

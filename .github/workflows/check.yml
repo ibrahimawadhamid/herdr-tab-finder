@@ -1,0 +1,97 @@
+name: check
+
+# Every push and pull request, and every Monday against the newest Herdr, so a Herdr change that breaks
+# the mod shows up here before people meet it.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mod:
+    name: Mod loads in Herdr (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package holds no personal files
+        run: |
+          for f in config.json notes.json; do
+            if [ -e "mods/Tab finder/$f" ]; then echo "mods/Tab finder/$f must not be published"; exit 1; fi
+          done
+      - name: JSON files are valid
+        run: for f in "mods/Tab finder/mod.json" keys.json; do python3 -m json.tool "$f" > /dev/null; done
+      - name: JavaScript syntax
+        run: cp "mods/Tab finder/main.js" "$RUNNER_TEMP/main.mjs" && node --check "$RUNNER_TEMP/main.mjs"
+      - name: Install the Herdr app
+        run: |
+          curl -fsSL https://releases.herdr.dev/app/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: herdr-app check
+        run: herdr-app --version && herdr-app check "mods/Tab finder"
+
+  install-sh:
+    name: install.sh (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        run: shellcheck -s sh install.sh
+      - name: Install, bind, update, uninstall
+        run: |
+          set -eu
+          export HERDR_APP_HOME="$RUNNER_TEMP/herdr-app"
+          mkdir -p "$HERDR_APP_HOME"
+          printf '{\n  "global": {\n    "ctrl-shift-t": "tab.new"\n  }\n}\n' > "$HERDR_APP_HOME/keys.json"
+          if [ "$(uname -s)" = Darwin ]; then key=cmd-e; else key=ctrl-shift-g; fi
+          sh install.sh --bind
+          grep -q "\"$key\": \"mod.open:Tab finder\"" "$HERDR_APP_HOME/keys.json"
+          grep -q '"ctrl-shift-t": "tab.new"' "$HERDR_APP_HOME/keys.json"
+          echo '{"Example": "a note"}' > "$HERDR_APP_HOME/mods/Tab finder/notes.json"
+          sh install.sh
+          test -f "$HERDR_APP_HOME/mods/Tab finder/notes.json"
+          sh install.sh --uninstall
+          test -f "$HERDR_APP_HOME/mods/Tab finder/notes.json"
+          test ! -e "$HERDR_APP_HOME/mods/Tab finder/main.js"
+          if grep -q "mod.open" "$HERDR_APP_HOME/keys.json"; then echo "shortcut not removed"; exit 1; fi
+          sh install.sh && sh install.sh --uninstall --purge
+          test ! -e "$HERDR_APP_HOME/mods/Tab finder"
+          if sh install.sh --nope; then exit 1; else test $? -eq 2; fi
+
+  install-ps1:
+    name: install.ps1 (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $r = Invoke-ScriptAnalyzer -Path install.ps1 -Severity Warning,Error
+          if ($r) { $r | Format-Table -AutoSize | Out-String | Write-Output; exit 1 }
+      - name: Install, bind, update, uninstall (PowerShell 7 and Windows PowerShell 5.1)
+        shell: pwsh
+        run: |
+          foreach ($ps in @("pwsh", "powershell")) {
+            $app = Join-Path $env:RUNNER_TEMP "herdr-app-$ps"
+            New-Item -ItemType Directory -Path $app -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $app "keys.json") -Value '{ "global": { "ctrl-shift-t": "tab.new" } }'
+            & $ps -NoProfile -File install.ps1 -AppHome $app -Bind
+            if ($LASTEXITCODE -ne 0) { throw "$ps install failed" }
+            $keys = Get-Content -LiteralPath (Join-Path $app "keys.json") -Raw | ConvertFrom-Json
+            if ($keys.global.'ctrl-shift-g' -ne "mod.open:Tab finder" -or $keys.global.'ctrl-shift-t' -ne "tab.new") { throw "$ps keys.json wrong" }
+            & $ps -NoProfile -File install.ps1 -AppHome $app -Uninstall -Purge
+            if ($LASTEXITCODE -ne 0) { throw "$ps uninstall failed" }
+            if (Test-Path -LiteralPath (Join-Path $app "mods\Tab finder")) { throw "$ps left the mod behind" }
+            $keys = Get-Content -LiteralPath (Join-Path $app "keys.json") -Raw | ConvertFrom-Json
+            if ($keys.global.PSObject.Properties['ctrl-shift-g']) { throw "$ps left the shortcut behind" }
+          }
