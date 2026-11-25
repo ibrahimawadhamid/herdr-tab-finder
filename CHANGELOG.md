@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.0 (2026-11-25)
+
+- **The credit opens the project.** Click "Made with ♥ by Ibrahim Awad" to open Tab finder on GitHub,
+  to star it, report a bug or suggest an idea.
+- **Words per board.** A title and noun belong to one space's board (`config.json` → `spaces`, or the
+  board's props), so a custom word like "agents" never leaks onto every other board. Nouns can be a
+  `[singular, plural]` pair.
+- **Long names stay readable.** Cards cut long names and lines to fit and show the whole text, wrapped,
+  when you hover.
+- **Small and short screens.** A short pane drops the greeting and tip to fit more cards; a popup on a
+  short window shrinks its list so the footer stays in view.
+- Fixed: a tab left "done" for over an hour made the board rewrite its state on every redraw.
+- Fixed: a tab with several agents could be marked "On a loop" after a single finish.
+- Fixed: the keyboard selection jumped to another tab when cards moved; it now stays on its tab.
+- Fixed: moving down into a new section could leave the selected card out of view.
+- Fixed: a helper agent could be counted twice in "N agents".
+- Fixed: notes now match the name a card shows, and never match by Herdr's tab numbers.
+- Fixed: the popup no longer suggests Esc to clear a search (Esc closes it).
+- Installers: the Windows one-liner no longer closes your PowerShell window; an interrupted copy leaves
+  the installed version untouched; a symlinked keys.json stays a symlink; `curl … | sh` always installs
+  the release, never a stray local copy; Windows PowerShell 5.1 no longer stops on herdr-app's warnings.
+
 ## 1.0.0 (2026-11-25)
 
 The first public release.

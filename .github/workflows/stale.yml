@@ -1,0 +1,31 @@
+name: stale
+
+# Keeps the tracker tidy without a full-time maintainer: quiet issues and pull requests get a friendly
+# note, and close two weeks later unless someone replies. Bugs and security reports are never closed.
+on:
+  schedule:
+    - cron: "30 5 * * 2"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-stale: 90
+          days-before-close: 14
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: bug,security,pinned,ci
+          exempt-pr-labels: pinned,dependencies
+          stale-issue-message: >
+            This has been quiet for 90 days, so it's marked stale. Reply if it still matters and it stays
+            open; otherwise it closes in two weeks.
+          stale-pr-message: >
+            This pull request has been quiet for 90 days, so it's marked stale. Push or comment to keep it
+            open; otherwise it closes in two weeks.

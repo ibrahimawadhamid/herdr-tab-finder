@@ -1,0 +1,24 @@
+name: dependabot auto-merge
+
+# Dependabot only updates the versions of the actions CI uses. Every such pull request runs the full
+# checks; this turns on auto-merge, so it lands by itself once they pass and never if they fail.
+# pull_request_target runs this file from main, and it never checks out the pull request's code.
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Merge once the checks pass
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

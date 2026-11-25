@@ -71,7 +71,9 @@ CI runs the same checks on Linux, macOS and Windows for every pull request.
 
 ## Releases
 
-Maintainers bump `VERSION` in `main.js` and in both installers, add the version to CHANGELOG.md, tag
-`vX.Y.Z` and publish a GitHub release. The installers download the tag matching their own version.
+Bump `VERSION` in `main.js`, `install.sh` and `install.ps1`, add a `## X.Y.Z (date)` section to
+CHANGELOG.md, then push a signed tag `vX.Y.Z`. The release workflow checks that all four agree and
+publishes the GitHub release with that changelog section. The installers download the tag matching their
+own version, so a release reaches people the moment it's published.
 
 Everyone taking part is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).

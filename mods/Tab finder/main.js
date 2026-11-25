@@ -33,7 +33,7 @@ import { v_flex, h_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { spaces, agents, panes, terminals, machines, run, theme, props, appHome, readTextFile, checking,
          shared, setShared, focused, closeOverlay, fonts, window, settings, placement, nextCommand, exec } from "herdr";
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 export const REPO = "https://github.com/ibrahimawadhamid/herdr-tab-finder";
 
 // This mod's folder name, taken from where it was loaded, so a renamed copy (to avoid a name clash) still
@@ -57,6 +57,8 @@ const LOOP_COUNT = 3, LOOP_WINDOW = 60 * 60 * 1000;
 const GAP = 12, CARD_MIN = 260, CARD_MAX = 300, CARD_H = 78;
 // A popup grows with its content (up to its mod.json height), so its list gets a height of its own.
 const POPUP_LIST_MAX = 440, HEAD_H = 16;
+// Everything in a popup but its list (padding, greeting, title, search box, footer), at zoom 1.
+const POPUP_CHROME = 196;
 // Herdr gives a render a time budget, and a few hundred cards exceed it. So the board draws one page of
 // this many cards at a time; search and the counts always cover every tab.
 const MAX_CARDS = 100;
@@ -122,6 +124,23 @@ function fold(s) {
 }
 // Read a live list from Herdr, or [] when this version doesn't have it.
 function safe(fn) { try { const v = fn(); return Array.isArray(v) ? v : []; } catch { return []; } }
+// Tooltips draw one line per line of text: wrap long text at spaces, and cut very long text short.
+function wrap(text, width = 56, max = 300) {
+  let t = String(text || "");
+  if ([...t].length > max) t = [...t].slice(0, max - 1).join("").trimEnd() + "…";
+  return t.split("\n").map((line) => {
+    const out = [];
+    let cur = "";
+    for (const word of line.split(/\s+/)) {
+      if (!word) continue;
+      if (cur && [...cur].length + 1 + [...word].length > width) { out.push(cur); cur = word; }
+      else cur = cur ? `${cur} ${word}` : word;
+      while ([...cur].length > width) { out.push([...cur].slice(0, width).join("")); cur = [...cur].slice(width).join(""); }
+    }
+    if (cur) out.push(cur);
+    return out.join("\n");
+  }).join("\n");
+}
 const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + "s")}`;
 // Natural order ("Task 2" before "Task 10"), case-insensitive. Written out because not every JavaScript
 // engine honors localeCompare's numeric option. naturalKey runs once per tab; naturalCmp per comparison.
@@ -153,6 +172,9 @@ export default class TabFinder extends View {
     this.sel = null;
     this.page = 0;
     this.width = 1100;
+    this.height = 0;
+    this.listCap = POPUP_LIST_MAX;   // a popup's list height, lowered when the window is too short for it
+    this.lastListH = 0;
     this.lastSeen = null;
     this.wasActive = false;
     this.scroll = ScrollHandle.new();
@@ -222,29 +244,43 @@ export default class TabFinder extends View {
     setShared(K.migrated, true);
   }
 
-  // Each time a tab turns "done" (finished while nobody looked), remember when. A tab that does this
-  // LOOP_COUNT times within LOOP_WINDOW is on a loop. `changed_at` identifies the event, so several
-  // copies of this mod (a pane and a popup) never count the same one twice.
+  // Each time a tab turns "done" (finished while nobody looked), remember when, by this computer's clock.
+  // A tab that does this LOOP_COUNT times within LOOP_WINDOW is on a loop. Per tab, shared state keeps
+  // { at: [times], done }: `done` marks a finish already counted, so it counts once however long it lasts
+  // and whatever its other agents do meanwhile, and several copies of this mod never count it twice.
+  // It writes only when a tab turns done or stops being done, or when an old finish expires.
   trackFinishes(all) {
     const now = Date.now();
     const old = shared(K.finishes);
     const prev = old && typeof old === "object" && !Array.isArray(old) ? old : {};
-    const live = new Set();
+    const read = (v) => {
+      const e = Array.isArray(v) ? { at: v } : v && typeof v === "object" ? v : {};
+      return { at: list(e.at).filter((x) => typeof x === "number"), done: e.done === true };
+    };
+    const keep = (e) => ({ at: e.at.filter((x) => now - x < LOOP_WINDOW && x <= now + 60000), done: e.done });
+    const same = (a, v) => {
+      if (!v || Array.isArray(v) || typeof v !== "object") return !a.at.length && !a.done;
+      const b = read(v);
+      return a.done === b.done && a.at.length === b.at.length && a.at.every((x, i) => x === b.at[i]);
+    };
     const next = {};
     let changed = false;
-    for (const sp of all) for (const tab of sp.tabs) {
-      live.add(tab.id);
-      let times = list(prev[tab.id]).filter((x) => typeof x === "number" && now - x < LOOP_WINDOW);
-      if (tab.status === "done" && tab.changed_at && !times.includes(tab.changed_at)) { times = [...times, tab.changed_at].slice(-8); changed = true; }
-      if (times.length !== list(prev[tab.id]).length) changed = true;
-      if (times.length) next[tab.id] = times;
+    const seen = new Set();
+    for (const sp of all) for (const tab of sp.tabs || []) {
+      seen.add(tab.id);
+      const e = keep(read(prev[tab.id]));
+      if (tab.status === "done") {
+        if (!e.done) { e.at = [...e.at, now].slice(-8); e.done = true; }
+      } else e.done = false;
+      if (e.at.length || e.done) next[tab.id] = e;
+      if (!same(e, prev[tab.id])) changed = true;
     }
-    // Keep tabs we can't see right now (a machine that is offline); drop the rest when they expire.
+    // Tabs we can't see right now (a machine that is offline) keep theirs until they expire.
     for (const id of Object.keys(prev)) {
-      if (live.has(id)) continue;
-      const times = list(prev[id]).filter((x) => typeof x === "number" && now - x < LOOP_WINDOW);
-      if (times.length) next[id] = times;
-      if (times.length !== list(prev[id]).length) changed = true;
+      if (seen.has(id)) continue;
+      const e = keep(read(prev[id]));
+      if (e.at.length) next[id] = e;
+      if (!same(e, prev[id]) || !e.at.length) changed = true;
     }
     if (changed) setShared(K.finishes, next);
     return next;
@@ -280,13 +316,14 @@ export default class TabFinder extends View {
     for (const [tab, as] of byTab) {
       let main = as[0];
       for (const a of as) if (a.focused || (!main.focused && a.seq > main.seq)) main = a;
-      const seen = new Set();
+      // Agents in the tab are counted once each, so a helper that is also an agent here isn't counted twice.
+      const seen = new Set(as.map((a) => a.address));
       let title = cleanTitle(main.title);
       if (title && main.program && title === main.program.name) title = "";
       info.set(tab, { title, count: as.length + as.reduce((n, a) => n + team(a.address, seen), 0) });
     }
     const finishes = checking() ? {} : this.trackFinishes(all);
-    const loops = new Set(Object.keys(finishes).filter((id) => finishes[id].length >= LOOP_COUNT));
+    const loops = new Set(Object.keys(finishes).filter((id) => finishes[id].at.length >= LOOP_COUNT));
     const muted = new Set(list(shared(K.muted)));
     const scoped = this.scope === "all" ? all : [home].filter(Boolean);
     const items = scoped.flatMap((sp) => sp.tabs.filter((t) => !boards.has(t.id)).map((t) => ({ ...t, space: sp })));
@@ -294,7 +331,7 @@ export default class TabFinder extends View {
     const recent = list(shared(K.recent));
     // Machines we can't reach: Herdr still lists their spaces as last seen, so their status is stale.
     const away = new Set(safe(machines).filter((m) => m.name && m.layout === "unavailable").map((m) => m.name));
-    const finished = new Set(Object.keys(finishes));
+    const finished = new Set(Object.keys(finishes).filter((id) => finishes[id].at.length));
     const memo = { label: new Map(), sub: new Map(), key: new Map() };
     let front = null;
     try { front = (focused() || {}).tab || null; } catch {}
@@ -329,9 +366,16 @@ export default class TabFinder extends View {
     if (lead && lead.mod) return lead.title || lead.mod;
     return prog || "Terminal";
   }
-  note(tab) {
-    const n = this.notes[`${tab.space.name} / ${tab.name}`] ?? this.notes[tab.name];
-    return typeof n === "string" ? n : "";
+  // A note is found by the tab's own name (when someone named it) or by the name the card shows, with or
+  // without "Space / " in front. Herdr's numbers for unnamed tabs ("2") are never used: they'd match the
+  // second tab of every space.
+  note(tab, s) {
+    const names = [tab.named ? tab.name : null, s ? this.label(s, tab) : null].filter(Boolean);
+    for (const n of names) {
+      const v = this.notes[`${tab.space.name} / ${n}`] ?? this.notes[n];
+      if (typeof v === "string") return v;
+    }
+    return "";
   }
   subtitle(s, tab) {
     let v = s.memo.sub.get(tab.id);
@@ -341,7 +385,7 @@ export default class TabFinder extends View {
   // Under the name: your note, else what the agent says it is doing, else its live title, else the
   // program and where it runs.
   subtitleOf(s, tab) {
-    const n = this.note(tab);
+    const n = this.note(tab, s);
     if (n) return n;
     const name = this.label(s, tab);
     const lead = s.paneOf.get(tab.id);
@@ -529,6 +573,8 @@ export default class TabFinder extends View {
       .cursor_pointer()
       .hover((st) => st.bg(t.hover).border_color(t.accent))
       .on_click(() => this.open(tab))
+      // Long names and lines are cut to fit the card; hovering shows them whole.
+      .when([...name].length > 24 || [...sub].length > 34, (el) => el.tooltip(wrap(sub ? `${name}\n${sub}` : name)))
       .role("list_box_option")
       .accessibility_label([name, sub, line, extra, loop ? "on a loop" : "", fav ? "favorite" : "", muted ? "muted" : ""]
         .filter(Boolean).join(", "))
@@ -648,7 +694,19 @@ export default class TabFinder extends View {
     const before = this.page * MAX_CARDS;
     const after = total - before - flat.length;
     this.lastFlat = flat;
-    if (this.sel !== null && this.sel >= flat.length) this.sel = flat.length ? flat.length - 1 : null;
+    // The selection follows its tab (in its section), not a position: when statuses change and cards
+    // move, the same tab stays selected, or nothing is when it's gone from this page.
+    const secOf = secs.flatMap((x) => x.tabs.map(() => x.title));
+    const remember = () => {
+      this.selRef = this.sel !== null && flat[this.sel] ? { id: flat[this.sel].id, sec: secOf[this.sel] } : null;
+    };
+    if (this.sel === null) this.selRef = null;
+    else if (this.selRef) {
+      let i = flat.findIndex((t, j) => t.id === this.selRef.id && secOf[j] === this.selRef.sec);
+      if (i < 0) i = flat.findIndex((t) => t.id === this.selRef.id);
+      this.sel = i >= 0 ? i : null;
+      if (i < 0) this.selRef = null;
+    } else if (this.sel >= flat.length) this.sel = flat.length ? flat.length - 1 : null;
 
     // Card width: fill the row evenly between CARD_MIN and CARD_MAX; one full-width column when narrow.
     const pad = this.width < 560 ? 14 : 24;
@@ -679,11 +737,14 @@ export default class TabFinder extends View {
     const contentH = rows.length
       ? rows.reduce((h, r) => h + (r.page ? 30 : r.head ? HEAD_H + (r.first ? 0 : 8) : CARD_H), 0) + GAP * (rows.length - 1) + 12
       : 40;
-    const listH = Math.min(POPUP_LIST_MAX, contentH);
+    const listH = Math.max(Math.min(96, contentH), Math.min(this.listCap, POPUP_LIST_MAX, contentH));
+    this.lastListH = listH;
     // A popup or a floating block grows with its content, so its list needs a height of its own.
     let floating = false;
     try { floating = !!placement(); } catch {}
     const sized = !!this.overlay || floating;
+    // A short pane (a small laptop screen, a split) drops the greeting and tightens spacing for more cards.
+    const short = !sized && this.height > 0 && this.height < 600;
 
     const mine = this.custom(this.scope === "space" ? sp : null);
     const count = plural(all.length, mine.noun[0], mine.noun[1]);
@@ -704,7 +765,7 @@ export default class TabFinder extends View {
         setShared(K.popupScope, this.scope);
       })));
 
-    const empty = this.filter ? "Nothing matches your search. Press Esc to clear it."
+    const empty = this.filter ? (this.overlay ? "Nothing matches your search." : "Nothing matches your search. Press Esc to clear it.")
       : this.chip === "favs" ? "No favorites yet. Click the star on a card to add one."
       : this.chip === "needs" ? "Nothing needs your input right now."
       : this.chip === "working" ? "Nothing is working right now."
@@ -716,20 +777,27 @@ export default class TabFinder extends View {
 
     // Scroll so a card shows, with what sits just above or below its row: its section title, or the
     // line that turns the page.
-    const reveal = (i) => {
+    // Moving down reveals the card's row (and the "Next page" line under the last one); moving up also
+    // reveals the section title or "Previous page" line above it. scroll_to_item scrolls as little as it
+    // can, so revealing a title when moving down would leave the card itself below the view.
+    const reveal = (i, down) => {
       const pos = where[i];
       if (!pos) return;
       let child = pos[2];
-      if (pos[2] > 0 && (rows[pos[2] - 1].head || rows[pos[2] - 1].page)) child = pos[2] - 1;
-      if (pos[2] > 1 && rows[pos[2] - 1].head && rows[pos[2] - 2].page) child = pos[2] - 2;
-      if (rows[pos[2] + 1] && rows[pos[2] + 1].page) child = pos[2] + 1;
+      if (down) {
+        if (rows[pos[2] + 1] && rows[pos[2] + 1].page) child = pos[2] + 1;
+      } else {
+        if (pos[2] > 0 && (rows[pos[2] - 1].head || rows[pos[2] - 1].page)) child = pos[2] - 1;
+        if (pos[2] > 1 && rows[pos[2] - 1].head && rows[pos[2] - 2].page) child = pos[2] - 2;
+      }
       this.scroll.scroll_to_item(child);
     };
     // A page turned with the keys: put the cursor on its first or last card once it is drawn.
     if (this.turned) {
-      this.sel = this.turned === "next" ? 0 : flat.length - 1;
+      const next = this.turned === "next";
+      this.sel = next ? 0 : flat.length - 1;
       this.turned = null;
-      if (flat.length) reveal(this.sel);
+      if (flat.length) { remember(); reveal(this.sel, !next); } else this.sel = null;
     }
     const turn = (dir) => {
       this.page += dir === "next" ? 1 : -1;
@@ -740,7 +808,7 @@ export default class TabFinder extends View {
       const n = flat.length;
       if (!n) return false;
       const cur = this.sel ?? this.pickedIndex();
-      if (cur < 0) { this.sel = 0; return true; }
+      if (cur < 0) { this.sel = 0; remember(); reveal(0, false); return true; }
       const [r, c] = where[cur];
       if (k === "left") this.sel = Math.max(0, cur - 1);
       else if (k === "right") this.sel = Math.min(n - 1, cur + 1);
@@ -752,7 +820,8 @@ export default class TabFinder extends View {
         const target = cardRows[Math.min(cardRows.length - 1, Math.max(0, r + step))];
         this.sel = target[Math.min(c, target.length - 1)];
       }
-      reveal(this.sel);
+      remember();
+      reveal(this.sel, k === "down" || k === "pagedown" || k === "right");
       return true;
     };
 
@@ -763,12 +832,23 @@ export default class TabFinder extends View {
       .on_size_change((size, cx) => {
         const zoom = Number((settings() || {}).zoom) || 1;
         const width = size.width / zoom;
-        if (Math.abs(width - this.width) > 4) { this.width = width; cx.notify(); }
+        const height = size.height / zoom;
+        let redraw = false;
+        if (Math.abs(width - this.width) > 4) { this.width = width; redraw = true; }
+        if (Math.abs(height - this.height) > 4) { this.height = height; redraw = true; }
+        // A popup or floating block can't be taller than Herdr allows (a share of the window), and Herdr
+        // doesn't say how tall the window is: when this copy comes out shorter than its content, the
+        // window is short, so the list gives up the difference and the footer stays in view.
+        if (sized && this.lastListH && height < this.lastListH + POPUP_CHROME - 6) {
+          const cap = Math.max(96, Math.floor(height - POPUP_CHROME - 6));
+          if (cap < this.listCap) { this.listCap = cap; redraw = true; }
+        }
+        if (redraw) cx.notify();
       })
       .size_full()
       .bg(this.overlay ? t.popover : t.background)
-      .px(pad).pt(narrow ? 14 : 22).pb(10)
-      .gap(14)
+      .px(pad).pt(narrow || short ? 12 : 22).pb(short ? 6 : 10)
+      .gap(short ? 10 : 14)
       .on_key_down((e, cx) => {
         const k = e.key;
         const m = e.modifiers || {};
@@ -787,7 +867,7 @@ export default class TabFinder extends View {
       })
       .child(h_flex().items_end().justify_between().gap(16).flex_wrap()
         .child(v_flex().gap(2).min_w(0)
-          .child(div().text_size(12).text_color(t.dim).child(greeting(typeof this.config.name === "string" ? this.config.name : "")))
+          .when(!short, (el) => el.child(div().text_size(12).text_color(t.dim).child(greeting(typeof this.config.name === "string" ? this.config.name : ""))))
           .child(h_flex().gap(10).items_center().min_w(0)
             .child(div().truncate().text_size(22).font_bold().text_color(t.foreground).child(title))
             .child(div().flex_none().px(8).py(1).rounded(10).bg(t.raised).text_size(11.5).text_color(t.muted)
@@ -819,7 +899,7 @@ export default class TabFinder extends View {
       .when(this.problems.length > 0, (el) => el.child(v_flex().flex_none().gap(2)
         .children(this.problems.map((x, i) => div().id(`tf-problem-${i}`).text_size(11).text_color(t.blocked).child(x)))))
       .child(h_flex().flex_none().items_center().justify_between().gap(12).flex_wrap()
-        .when(!narrow, (el) => el.child(div().text_size(10.5).text_color(t.dim)
+        .when(!narrow && !short, (el) => el.child(div().text_size(10.5).text_color(t.dim)
           .child("Star a tab to keep it in Favorites (Ctrl+S). The bell mutes its new output (Ctrl+M).")))
         .child(this.credit(t)));
   }

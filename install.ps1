@@ -26,17 +26,21 @@ param(
   [string]$Url = ""
 )
 $ErrorActionPreference = "Stop"
-$TfVersion = "1.0.0"
+$TfVersion = "1.1.0"
 $Repo = "ibrahimawadhamid/herdr-tab-finder"
 $Marker = "Tab finder for Herdr"
 
 function Say([string]$Text) { [Console]::Out.WriteLine($Text) }
-function Fail([string]$Text, [int]$Code = 1) { [Console]::Error.WriteLine("tab finder: $Text"); exit $Code }
+# Errors end the run through one handler at the bottom: a .ps1 file exits with the code, while the
+# downloaded one-liner (a scriptblock at your prompt) only sets $LASTEXITCODE, so your window stays open.
+function Fail([string]$Text, [int]$Code = 1) { [Console]::Error.WriteLine("tab finder: $Text"); throw "TF_EXIT:$Code" }
 function Write-Utf8([string]$Path, [string]$Text) {
   [IO.File]::WriteAllText($Path, $Text, (New-Object Text.UTF8Encoding $false))
 }
 
-if ($Version) { Say $TfVersion; exit 0 }
+$TfCode = 0
+try {
+if ($Version) { Say $TfVersion; return }
 if ($Purge -and -not $Uninstall) { Fail "-Purge goes with -Uninstall" 2 }
 if ($Bind -and $Uninstall) { Fail "-Bind and -Uninstall don't go together" 2 }
 
@@ -100,9 +104,19 @@ function Edit-KeyBinding([string]$Mode) {
   $backup = "$Keys.bak-tabfinder-$stamp"; $n = 1
   while (Test-Path -LiteralPath $backup) { $n++; $backup = "$Keys.bak-tabfinder-$stamp-$n" }
   Copy-Item -LiteralPath $Keys -Destination $backup
-  $tmp = "$Keys.tf-new"
+  # A keys.json that links elsewhere (dotfiles) is written where it lives, keeping the link.
+  $real = $Keys
+  try {
+    $it = Get-Item -LiteralPath $Keys -Force
+    if ($it.LinkType -and $it.Target) {
+      $t = @($it.Target)[0]
+      if (-not [IO.Path]::IsPathRooted($t)) { $t = Join-Path (Split-Path -Parent $Keys) $t }
+      $real = $t
+    }
+  } catch { $real = $Keys }
+  $tmp = "$real.tf-new"
   Write-Utf8 $tmp (($data | ConvertTo-Json -Depth 20) + "`n")
-  Move-Item -LiteralPath $tmp -Destination $Keys -Force
+  Move-Item -LiteralPath $tmp -Destination $real -Force
   Say "keys.json was backed up to $backup."
   if ($Mode -eq "add") { Say "Note: once keys.json is edited, Herdr treats it as yours and stops adding new default shortcuts to it." }
 }
@@ -118,7 +132,7 @@ if ($Uninstall) {
   else { Say "Removed Tab finder from $Dest; kept your own files there." }
   Edit-KeyBinding "remove"
   Say "Favorites, mutes and recent tabs stay in Herdr's shared.json (keys tabfinder.*); delete them there while Herdr is closed if you like."
-  exit 0
+  return
 }
 
 # Where the files come from: beside this script, else a download of this version's release.
@@ -157,20 +171,30 @@ try {
     Say "Installing Tab finder into $Dest"
   }
 
-  # Each file goes to a temporary name, then moves into place, so Herdr never loads a half-written one;
-  # main.js goes last, so it reloads with its icons already there.
+  # First every file is copied next to its final place (a failed copy changes nothing installed), then
+  # each moves in; main.js goes last, so Herdr reloads it with its icons already there.
   New-Item -ItemType Directory -Path (Join-Path $Dest "icons") -Force | Out-Null
-  function Put([string]$From, [string]$To) { Copy-Item -LiteralPath $From -Destination "$To.tf-new" -Force; Move-Item -LiteralPath "$To.tf-new" -Destination $To -Force }
-  foreach ($svg in Get-ChildItem -LiteralPath (Join-Path $Src "icons") -Filter "*.svg") { Put $svg.FullName (Join-Path (Join-Path $Dest "icons") $svg.Name) }
-  Put (Join-Path $Src "mod.json") (Join-Path $Dest "mod.json")
-  Put (Join-Path $Src "main.js") (Join-Path $Dest "main.js")
+  $moves = @()
+  foreach ($svg in Get-ChildItem -LiteralPath (Join-Path $Src "icons") -Filter "*.svg") { $moves += ,@($svg.FullName, (Join-Path (Join-Path $Dest "icons") $svg.Name)) }
+  $moves += ,@((Join-Path $Src "mod.json"), (Join-Path $Dest "mod.json"))
+  $moves += ,@((Join-Path $Src "main.js"), (Join-Path $Dest "main.js"))
+  try {
+    foreach ($m in $moves) { Copy-Item -LiteralPath $m[0] -Destination "$($m[1]).tf-new" -Force }
+  } catch {
+    foreach ($m in $moves) { Remove-Item -LiteralPath "$($m[1]).tf-new" -Force -ErrorAction SilentlyContinue }
+    Fail "couldn't copy the files into $Dest ($($_.Exception.Message))"
+  }
+  foreach ($m in $moves) { Move-Item -LiteralPath "$($m[1]).tf-new" -Destination $m[1] -Force }
   foreach ($f in @("config.json", "notes.json")) { if (Test-Path -LiteralPath (Join-Path $Dest $f)) { Say "Kept your $f." } }
 
   $checker = Get-Command herdr-app -ErrorAction SilentlyContinue
   if ($checker) {
     $old = $env:HERDR_APP_HOME; $env:HERDR_APP_HOME = $AppHome
+    # Windows PowerShell 5.1 turns a native program's stderr into an error under "Stop"; this is only a check.
+    $eap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     try { & $checker.Source check $Dest *> $null; if ($LASTEXITCODE -eq 0) { Say "Checked: it loads." } else { Say "Warning: herdr-app check didn't pass. Run: herdr-app check `"$Dest`"" } }
-    finally { $env:HERDR_APP_HOME = $old }
+    catch { Say "Warning: herdr-app check couldn't run. Run: herdr-app check `"$Dest`"" }
+    finally { $env:HERDR_APP_HOME = $old; $ErrorActionPreference = $eap }
   }
 
   if ($Bind) { Edit-KeyBinding "add" }
@@ -184,4 +208,12 @@ if ($Bind) { Say "  * Press $Key anywhere in Herdr for the popup." }
 else { Say "  * For a shortcut, run: .\install.ps1 -Bind   (adds $Key, only if it's free)" }
 Say "  * Or keep it as a tab:  herdr-app do tab.new '{`"name`":`"Find a tab`",`"mod`":`"$Name`"}'"
 Say "  * Or open it once:      herdr-app do mod.open '{`"name`":`"$Name`"}'"
-exit 0
+} catch {
+  $TfCode = 1
+  if ("$($_.Exception.Message)" -match '^TF_EXIT:(\d+)$') { $TfCode = [int]$Matches[1] }
+  else { [Console]::Error.WriteLine("tab finder: $($_.Exception.Message)") }
+}
+if ($TfCode -ne 0) {
+  if ($PSCommandPath) { exit $TfCode }
+  $global:LASTEXITCODE = $TfCode
+}

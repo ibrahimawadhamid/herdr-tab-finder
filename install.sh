@@ -15,10 +15,11 @@
 #   TAB_FINDER_REF     the release tag or branch to download (default: this script's version)
 #   TAB_FINDER_URL     download this .tar.gz instead (an internal mirror, say); it must hold mods/Tab finder/
 #
-# Exit codes: 0 done, 1 failed (nothing half-done is left behind), 2 bad option.
+# Exit codes: 0 done, 1 failed (an installed version is only replaced once the new files are all
+# copied), 2 bad option.
 set -eu
 
-VERSION=1.0.0
+VERSION=1.1.0
 REPO=ibrahimawadhamid/herdr-tab-finder
 
 say() { printf '%s\n' "$*"; }
@@ -31,7 +32,7 @@ for arg in "$@"; do
     --uninstall) uninstall=true ;;
     --purge) purge=true ;;
     --version) say "$VERSION"; exit 0 ;;
-    -h | --help) sed -n '2,21p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,19p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) say "tab finder: unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -62,6 +63,7 @@ keys_edit() {
   KEYS="$keys" KEY="$key" ACTION="$action" MODE="$1" "$py" - <<'PY'
 import json, os, sys
 path, key, action, mode = os.environ["KEYS"], os.environ["KEY"], os.environ["ACTION"], os.environ["MODE"]
+path = os.path.realpath(path)  # a keys.json that links elsewhere (dotfiles) is edited where it lives
 with open(path, encoding="utf-8") as f:
     keys = json.load(f)
 if not isinstance(keys, dict):
@@ -130,12 +132,21 @@ if [ "$uninstall" = true ]; then
 fi
 
 # Where the files come from: beside this script, else a download of this version's release.
-if here=$(cd "$(dirname "$0")" 2>/dev/null && pwd); then :; else here=$(pwd); fi
-src="$here/mods/Tab finder"
+# Only a real install.sh file uses the files beside it; piped (curl ... | sh), $0 is the shell, and a
+# folder that happens to hold an old copy must not be installed by mistake.
+src=""
+case $0 in
+  *install.sh) if [ -f "$0" ] && here=$(cd "$(dirname "$0")" 2>/dev/null && pwd); then src="$here/mods/Tab finder"; fi ;;
+esac
 tmp=""
-cleanup() { [ -n "$tmp" ] && rm -rf "$tmp"; return 0; }
+cleanup() {
+  [ -n "$tmp" ] && rm -rf "$tmp"
+  # Half-copied files from an interrupted install; the installed ones are untouched.
+  [ -n "${dest:-}" ] && rm -f "$dest"/*.tf-new "$dest"/icons/*.tf-new 2>/dev/null
+  return 0
+}
 trap cleanup EXIT INT TERM
-if [ ! -f "$src/main.js" ]; then
+if [ -z "$src" ] || [ ! -f "$src/main.js" ]; then
   command -v curl >/dev/null 2>&1 || fail "needs curl to download Tab finder"
   command -v tar >/dev/null 2>&1 || fail "needs tar to unpack Tab finder"
   ref=${TAB_FINDER_REF:-v$VERSION}
@@ -163,11 +174,12 @@ fi
 
 # Each file goes to a temporary name, then moves into place: Herdr reloads the mod as files change and
 # never sees a half-written one. main.js goes last, so it reloads with its icons already there.
+# First copy everything next to its final place (a failed copy changes nothing), then move each file in.
 mkdir -p "$dest/icons"
-put() { cp "$1" "$2.tf-new" && mv -f "$2.tf-new" "$2"; }
-for f in "$src/icons/"*.svg; do put "$f" "$dest/icons/$(basename "$f")"; done
-put "$src/mod.json" "$dest/mod.json"
-put "$src/main.js" "$dest/main.js"
+for f in "$src/icons/"*.svg; do cp "$f" "$dest/icons/$(basename "$f").tf-new" || fail "couldn't copy $(basename "$f") into $dest"; done
+cp "$src/mod.json" "$dest/mod.json.tf-new" || fail "couldn't copy mod.json into $dest"
+cp "$src/main.js" "$dest/main.js.tf-new" || fail "couldn't copy main.js into $dest"
+for f in "$dest/icons/"*.svg.tf-new "$dest/mod.json.tf-new" "$dest/main.js.tf-new"; do mv -f "$f" "${f%.tf-new}"; done
 for f in config.json notes.json; do if [ -f "$dest/$f" ]; then say "Kept your $f."; fi; done
 
 # Check it the way Herdr does, when herdr-app is around.

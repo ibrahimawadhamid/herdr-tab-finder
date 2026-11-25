@@ -23,20 +23,20 @@
 ## Why you'll like it
 
 - 🔎 **Find anything in a keystroke.** Press one key from anywhere, type a few letters, hit Enter. It
-  searches tab names, what each agent is doing, your notes, spaces and machines, and forgives typos
-  and accents.
+  searches tab names, what each agent is doing, your notes, spaces and machines, ignores accents, and
+  finds "Changelog" from just "chlg".
 - 🔕 **Only what needs you gets loud.** An agent waiting for your answer gets a red border and goes to
   the top. Finished work gets a quiet "New output" mark. Agents on `/loop` or a schedule are spotted on
   their own and never nag; a bell mutes anything else.
-- 🧭 **The whole fleet at a glance.** One card per tab: its status, how long it's been working, how
-  many agents and helpers run in it, and the line it's working on.
+- 🧭 **The whole fleet at a glance.** One card per tab, named as your tab bar names it: its status, how
+  long it's been working, how many agents and helpers run in it, and what the agent says it's doing.
 - ⭐ **Favorites and recent tabs** right at the top, across every layout.
 - 🖥️ **Every space, every machine.** Tabs on your servers are labelled; one that goes offline is marked,
   not hidden.
 - ⌨️ **Keyboard first, mouse friendly.** Arrows, Enter, Ctrl+S to star, Ctrl+M to mute. Screen-reader
-  labels and tooltips throughout.
-- 🎨 **Feels native.** It follows your Herdr theme, light or dark, and your zoom, from a narrow side pane
-  to a wide screen, and keeps up with hundreds of tabs.
+  labels, and tooltips that show long names in full.
+- 🎨 **Feels native.** It follows your Herdr theme, light or dark, your zoom and your display's scale,
+  from a narrow side pane or a small laptop screen to an ultrawide, and keeps up with hundreds of tabs.
 - 🔒 **Private by design.** No network, no telemetry, nothing outside its own folder. It only reads what
   Herdr already shows you.
 
@@ -80,7 +80,7 @@ the pane's title. For a shortcut, add this to the `"global"` section of `keys.js
 ```
 
 Both keys are free in Herdr's default shortcuts. (`ctrl-shift-e` is not: Herdr uses it to split a pane
-down on Linux and Windows.)
+down.)
 </details>
 
 ## Use it
@@ -140,8 +140,8 @@ you save, and updates never touch them. If one isn't valid JSON, the board says 
 Spaces are matched by name or id, and only that space's board uses its words; every other board stays
 generic.
 
-**`notes.json`**: one line per tab, shown under its name and searchable. Use `"Space / Tab"` when two
-spaces have a tab with the same name.
+**`notes.json`**: one line per tab, shown under its name and searchable. Use the tab's name, or the name
+its card shows; add `"Space / "` in front when two spaces have a tab with the same name.
 
 ```json
 { "Orchestrator": "Runs the checkout redesign team", "Data pipeline / Backfill": "Rerun on Fridays" }
@@ -162,33 +162,38 @@ A board tab also takes props, which win over config.json: `{"space": "Agents"}` 
 - **Data.** Favorites, mutes, recent tabs and recent finishes live in Herdr's `shared.json` under
   `tabfinder.*`, on each computer. They don't sync between computers.
 - **Rollout.** The installers run unattended, are safe to rerun, and exit 0 (done), 1 (failed) or
-  2 (bad option). Pin a version with `TAB_FINDER_REF=v1.0.0` (`-Ref`), install from an internal mirror
+  2 (bad option). Pin a version with `TAB_FINDER_REF=v1.1.0` (`-Ref`), install from an internal mirror
   with `TAB_FINDER_URL=https://…/tab-finder.tar.gz` (`-Url`), choose another folder name with
   `TAB_FINDER_NAME` (`-Name`), and point at a custom Herdr folder with `HERDR_APP_HOME` (`-AppHome`).
 - **Quality.** Every change, and every Monday against the newest Herdr, CI loads the mod in Herdr and
   runs both installers on Linux, macOS and Windows (PowerShell 7 and Windows PowerShell 5.1).
-- **Support.** Questions and ideas in [Issues](https://github.com/ibrahimawadhamid/herdr-tab-finder/issues);
-  security reports privately, as [SECURITY.md](SECURITY.md) explains.
+- **Support.** Bugs and ideas in [Issues](https://github.com/ibrahimawadhamid/herdr-tab-finder/issues),
+  questions in [Discussions](https://github.com/ibrahimawadhamid/herdr-tab-finder/discussions), security
+  reports privately as [SECURITY.md](SECURITY.md) explains. Contributions are welcome: see
+  [CONTRIBUTING.md](CONTRIBUTING.md).
 </details>
 
 ## Good to know
 
-- "New output" clears once you look at the tab, from any Herdr window, and after Herdr restarts.
-- A new looper is recognised after 3 finishes within an hour, counted while Herdr is open.
+- "New output" clears once you look at the tab, from any Herdr window.
+- A looper is recognised after 3 finishes within an hour. Finishes are counted while a Tab finder board
+  is open somewhere: keep one as a tab (it keeps counting in the background while you work elsewhere).
+  With only the popup, it sees just what has finished each time you open it.
 - A tab holding a Tab finder pane isn't listed on its own board.
 - Adding a shortcut makes `keys.json` yours, and Herdr then stops adding new default shortcuts to it.
   That's Herdr's rule for any edit to the file.
-- Herdr's own tab bar and agents list struggle at around 250 tabs in one space; Tab finder stays usable
-  there by showing 100 cards per page.
+- With hundreds of tabs, Tab finder shows 100 cards per page to stay within Herdr's drawing budget;
+  search and the counts always cover every tab.
 
 ## Uninstall
 
 ```sh
-sh install.sh --uninstall            # keeps your config.json and notes.json
-sh install.sh --uninstall --purge    # removes them too
+curl -fsSL https://raw.githubusercontent.com/ibrahimawadhamid/herdr-tab-finder/main/install.sh | sh -s -- --uninstall
 ```
 
-On Windows: `.\install.ps1 -Uninstall` (add `-Purge`). Either one also removes the shortcut it added.
+That keeps your `config.json` and `notes.json`; add `--purge` to remove them too. On Windows, run the
+install line with `-Uninstall` (and `-Purge`) in place of `-Bind`. Either way, the shortcut it added goes
+too. From a downloaded copy: `sh install.sh --uninstall` or `.\install.ps1 -Uninstall`.
 
 ---
 

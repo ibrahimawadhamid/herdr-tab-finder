@@ -122,7 +122,8 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
 - `gpui-base`: `InputState`/`Input` for search, `ScrollHandle` to scroll the selected card into view.
 - Shared state: `tabfinder.favorites`, `tabfinder.recent` (last 12), `tabfinder.muted`,
   `tabfinder.popup.scope` (`"all"` or `"space"`),
-  `tabfinder.finishes` (per tab, when it last turned done; pruned to the last hour),
+  `tabfinder.finishes` (per tab, `{ at: [times it turned done, last hour only], done: true while a counted
+  finish lasts }`; written only when that changes),
   `tabfinder.migrated` (a one-time copy of older `tabboard.*` favorites and recent tabs).
 - Art: its own 24px stroke icons (search, spinner, star, star-filled, bell, bell-off, loop, heart), all
   `currentColor`, drawn with `svg()` so they take the theme.
@@ -163,7 +164,11 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
 - **Unreachable machines** keep their last known spaces in `spaces()`; their statuses are stale.
 - **Tabs holding a Tab finder pane are left out of the board**, including a terminal split beside it.
 - **"done" turns "idle"** once you look at the tab on any Herdr client, and after Herdr restarts, so "New
-  output" disappears then; loop detection counts only finishes seen while Herdr runs.
+  output" disappears then. Loop detection runs inside render, so it counts only while some copy of the
+  mod is alive: a board tab keeps counting in the background (copies stay alive while hidden); a
+  popup-only setup sees only what is "done" when it opens. Count a finish when a tab *turns* done (once
+  per episode, by this computer's clock), never by `changed_at`: a tab with several agents changes
+  `changed_at` while it stays done, and a remote machine's clock may differ.
 - **Emoji tiles** need an emoji font. `icons: "auto"` uses emoji on macOS and Windows, and on Linux only
   when a font with "emoji" in its name is installed; otherwise letters.
 - **Faking an agent for tests:** OSC 7501 is `ESC ] 7501 ; state=working:app=claude-code:msg=<base64>
