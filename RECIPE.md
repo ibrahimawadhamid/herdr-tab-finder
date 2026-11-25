@@ -4,7 +4,7 @@ Every agent at a glance, and only the ones that need you lit up. Tab finder is a
 your Herdr tabs as cards: each shows the tab's name as the tab bar does, what its agent says it is doing,
 and its live status. Tabs waiting for your answer get a red border and go to the top; finished work gets
 a quiet mark; agents on a loop never nag. Keep it as a tab, or press one key to open it over anything,
-type a few letters and land on the tab.
+type a few letters and land on the tab, or make it when it isn't there.
 
 ![Tab finder](preview.png)
 
@@ -79,6 +79,36 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
   in the popup; Ctrl+S stars and Ctrl+M mutes the selected card (or the first result); Esc clears the
   search and filters in a pane. In the popup, Herdr closes it on Esc.
 - **Hover**: cards take `hover` with an `accent` border; the selected card keeps them.
+- **Make a tab from a search**: when the search text matches no tab (and no status filter is on), the
+  list shows `Nothing matches "<text>". Make a new tab with that name in <space>:` and rows (32px,
+  radius 8, `surface`, 1px `border`; the selected one `accent` border and `accent` at 13%): "Terminal"
+  first, then every installed agent from `knownAgents({ on: <the space's machine> })` with its icon and
+  name, in Herdr's order ("Checking which agents are installed…" while it answers; asked at most once a
+  minute). Up and Down move between rows, Enter or a click makes it: `tab.new { name: <text, one line, at
+  most 120 characters, cut at a word>, space, argv: agent.run }`, clears the search, and closes the popup.
+  The space is the board's own, else the one in front. On a machine that can't be reached it says so and
+  offers nothing. When the board shows one space and tabs elsewhere match, the line says so instead:
+  `Nothing here matches "<text>", but N tabs in other spaces do (click Show all spaces to see them). Or
+  make a new tab with that name here:`. If the agent check fails, a dim line says so and points to the +
+  button. Enter acts only on what the board shows for the text now in the box (typed ahead of a redraw,
+  it redraws first). The search box hint reads "Enter to make it".
+- **The + button** (15px plus icon at the right of the search box, labelled "New tab"): closes the popup
+  if it is one, then opens Herdr's own + menu as the tab bar does,
+  `openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })`; on a Herdr without
+  `knownAgents()` (which that menu came with), `tab.new` in the target space instead.
+- **In every new space** (a pill at the bottom left of the credit: "In every new space: off" / "on";
+  off by default; shared state `tabfinder.everySpace`): turning it on, when some spaces have no board,
+  asks in a bordered row "New spaces will get a Tab finder tab first. Add one to the N spaces without
+  one too?" with "Yes, add them", "No, only new spaces" and "Cancel". While on, every running copy checks
+  every 2 seconds (and on each render) for spaces not in `tabfinder.everySpace.seen`, marks them seen
+  first (so copies never add two), looks again for a board, and for each without one runs `tab.new {
+  space, name: "Find a tab", mod: <this folder>, props: { space: <its id> }, focus: false }`, noting it
+  in `tabfinder.everySpace.move` so any copy runs `tab.move { id, index: 1 }` once the tab shows (for
+  15 seconds). Spaces on machines that aren't ready (unreachable or still connecting) wait. The seen
+  list keeps every space still there and forgets gone ones only past 1000. Turning it off leaves added
+  boards.
+  Herdr starts a mod copy only when it first shows, so this runs once any board has shown (or while the
+  popup is open), catching up on spaces made before.
 - **The popup** starts with every space, or only the space you're in when "This space only" was on the
   last time (remembered in shared state).
 - **On its own**: the search box takes the keyboard each time the board's tab comes to the front, and
@@ -113,23 +143,27 @@ one.", "This space isn't here any more. Click Show all spaces to see every tab."
 - `herdr`: `spaces()`, `panes()`, `agents()`, `terminals()` (each terminal's `parent`, to count
   sub-agents in a tab), `machines()`, `focused()`, `theme()`, `settings()` (zoom), `window()` and
   `fonts()` (emoji or letters), `placement()` (a floating block), `nextCommand()` (`focus` from
-  `pane.go`; `favorite`, `mute`, `clear`, `focus` from keys.json's `"mod:Tab finder"` section),
-  `shared`/`setShared`, `run("space.select")`, `run("tab.select")`, `closeOverlay`, `checking()`. Each
+  `pane.go`; `favorite`, `mute`, `clear`, `new`, `focus` from keys.json's `"mod:Tab finder"` section),
+  `shared`/`setShared`, `run("space.select")`, `run("tab.select")`, `run("tab.new")`, `run("tab.move")`,
+  `closeOverlay`, `checking()`, and, looked up through `import * as herdr` so older Herdr versions still
+  load it, `knownAgents()` and `openOverlay()`. Each
   list read is guarded, so a missing one leaves its part empty instead of breaking the board.
 - Agent messages: `terminals()` gives each agent's OSC 7501 report (`report`, or `status` as an object
   in older versions); its `msg` (sent base64-encoded by the agent, decoded by herdr-core) is the subtitle.
   The tab's lead pane is its agent pane, else its first terminal, else any pane.
 - `gpui-base`: `InputState`/`Input` for search, `ScrollHandle` to scroll the selected card into view.
 - Shared state: `tabfinder.favorites`, `tabfinder.recent` (last 12), `tabfinder.muted`,
-  `tabfinder.popup.scope` (`"all"` or `"space"`),
+  `tabfinder.popup.scope` (`"all"` or `"space"`), `tabfinder.everySpace` (true or false) and
+  `tabfinder.everySpace.seen` (space ids already handled, last 1000),
   `tabfinder.finishes` (per tab, `{ at: [times it turned done, last hour only], done: true while a counted
   finish lasts }`; written only when that changes),
   `tabfinder.migrated` (a one-time copy of older `tabboard.*` favorites and recent tabs).
-- Art: its own 24px stroke icons (search, spinner, star, star-filled, bell, bell-off, loop, heart), all
+- Art: its own 24px stroke icons (search, spinner, star, star-filled, bell, bell-off, loop, heart, plus), all
   `currentColor`, drawn with `svg()` so they take the theme.
 - No network and no files outside its own folder. Clicking the footer credit opens the project page with
   the system's link opener (`exec`: `open` on macOS, `xdg-open` on Linux, `explorer` on Windows), as
-  Herdr's own mods open links; nothing else runs programs.
+  Herdr's own mods open links. Tabs it makes are started by Herdr (`tab.new`), from Herdr's own agent list,
+  only when the person asks.
 
 ## Watch out
 

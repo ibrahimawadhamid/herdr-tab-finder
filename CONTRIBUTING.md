@@ -14,7 +14,8 @@ easy to review and keeps Tab finder fast, quiet and private for everyone who ins
 ## The rules that keep Tab finder trustworthy
 
 1. **Private.** No network access, no telemetry, no reading or writing files outside the mod's own
-   folder, and no programs, except the system's link opener when someone clicks the credit. A change that
+   folder, and no programs of its own, except the system's link opener when someone clicks the credit.
+   (Tabs and agents it makes are started by Herdr, from Herdr's own list, only when someone asks.) A change that
    needs more must say so in the README and SECURITY.md, and will get a hard look.
 2. **Quiet.** Only tabs that need the person's input are highlighted. New visual noise needs a strong
    reason.

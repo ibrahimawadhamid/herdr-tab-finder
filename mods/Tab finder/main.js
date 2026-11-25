@@ -8,8 +8,17 @@
 //     The popup shows every space and closes when you pick a tab.
 // Keys: type to search; arrow keys and Page Up/Down move (past the last card, the next page); Enter opens;
 // Ctrl+S stars the selected card and Ctrl+M mutes it; Esc clears the search (in the popup, Esc closes it).
-// keys.json can also send "Tab finder.focus", ".favorite", ".mute" and ".clear" (section "mod:Tab finder"),
-// and pane.go can move onto a board pane (mod.json: focusable).
+// keys.json can also send "Tab finder.focus", ".favorite", ".mute", ".clear" and ".new" (section
+// "mod:Tab finder"), and pane.go can move onto a board pane (mod.json: focusable).
+//
+// Making tabs: the + button opens Herdr's own + menu (terminal, agents, space, worktree), so it always
+// offers exactly what Herdr does. When a search matches no tab, the board offers to make one named after
+// it: a terminal, or any agent Herdr knows is installed (knownAgents(), the same list the + menu shows).
+//
+// "In every new space" (off by default, the switch at the bottom of the board): every space made from then
+// on gets a board as its first tab, and turning it on can add one to the spaces you already have. Herdr
+// tells mods nothing when a space is made, so any open board (or the popup) adds the missing ones; each
+// space is handled once, so a board you close stays closed.
 //
 // Quiet by design: only tabs that need your input are highlighted. A tab whose agent finished while you
 // weren't looking gets a small "New output" mark. A tab that finishes 3 or more times within an hour
@@ -29,11 +38,14 @@
 // Made with ❤️ by Ibrahim Awad.
 
 import { View, div, svg } from "gpui-kit";
+import * as kit from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { spaces, agents, panes, terminals, machines, run, theme, props, appHome, readTextFile, checking,
          shared, setShared, focused, closeOverlay, fonts, window, settings, placement, nextCommand, exec } from "herdr";
+// Newer Herdr APIs, looked up at use so the mod still loads on a Herdr without them.
+import * as herdr from "herdr";
 
-export const VERSION = "1.1.1";
+export const VERSION = "1.2.0";
 export const REPO = "https://github.com/ibrahimawadhamid/herdr-tab-finder";
 
 // This mod's folder name, taken from where it was loaded, so a renamed copy (to avoid a name clash) still
@@ -52,7 +64,11 @@ const K = {
   finishes: "tabfinder.finishes",
   migrated: "tabfinder.migrated",
   popupScope: "tabfinder.popup.scope",
+  everySpace: "tabfinder.everySpace",      // true: every new space gets a board as its first tab
+  spacesSeen: "tabfinder.everySpace.seen", // spaces already given one (or skipped), so each is done once
+  moveFirst: "tabfinder.everySpace.move",  // space id -> when its board was added, until it's moved first
 };
+const BOARD_NAME = "Find a tab";
 const LOOP_COUNT = 3, LOOP_WINDOW = 60 * 60 * 1000;
 const GAP = 12, CARD_MIN = 260, CARD_MAX = 300, CARD_H = 78;
 // A popup grows with its content (up to its mod.json height), so its list gets a height of its own.
@@ -62,6 +78,9 @@ const POPUP_CHROME = 196;
 // Herdr gives a render a time budget, and a few hundred cards exceed it. So the board draws one page of
 // this many cards at a time; search and the counts always cover every tab.
 const MAX_CARDS = 100;
+const ROW_H = 32;          // a row of the "make a new tab" list
+const NAME_MAX = 120;      // a new tab's name, from the search text
+const AGENTS_TTL = 60000;  // how long the installed-agents list is reused (Herdr checks at most once a minute)
 const HUES = ["#5b8def", "#22a99a", "#e3814f", "#8b7cf6", "#3fae6a", "#d9649a", "#c9a227", "#4fb3d9"];
 // A picture for common kinds of work, matched on the tab's name. Letters are used when nothing matches.
 const ICONS = [
@@ -141,6 +160,15 @@ function wrap(text, width = 56, max = 300) {
     return out.join("\n");
   }).join("\n");
 }
+// A new tab's name from search text: one line, at most NAME_MAX characters, cut at a word when it's long.
+function tabName(text) {
+  const one = String(text || "").trim().replace(/\s+/g, " ");
+  const chars = [...one];
+  if (chars.length <= NAME_MAX) return one;
+  const cut = chars.slice(0, NAME_MAX - 1).join("");
+  const at = cut.lastIndexOf(" ");
+  return (at > NAME_MAX / 2 ? cut.slice(0, at) : cut).trimEnd() + "…";
+}
 const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + "s")}`;
 // Natural order ("Task 2" before "Task 10"), case-insensitive. Written out because not every JavaScript
 // engine honors localeCompare's numeric option. naturalKey runs once per tab; naturalCmp per comparison.
@@ -178,6 +206,13 @@ export default class TabFinder extends View {
     this.lastSeen = null;
     this.wasActive = false;
     this.scroll = ScrollHandle.new();
+    this.csel = 0;            // the selected row of the "make a new tab" list
+    this.known = {};          // machine ("" here) -> { list, at, loading, failed }: installed agents
+    this.making = null;       // { name, target, choices } while the board offers to make a tab
+    // Herdr's own + menu (its shipped "new-menu" mod) came with knownAgents(), which it uses, so a Herdr
+    // with that API has the menu. Older ones get a plain new terminal tab from the + button.
+    this.hasMenu = typeof herdr.openOverlay === "function" && typeof herdr.knownAgents === "function";
+    this.asking = false;      // asking whether turning on "In every new space" covers existing spaces
     // Which space a tab copy belongs to: props, else config.json, else the one shown when it first appeared.
     this.home = typeof p.space === "string" && p.space ? p.space : null;
     if (!this.home) { try { this.home = localStorage.getItem("space"); } catch {} }
@@ -194,13 +229,20 @@ export default class TabFinder extends View {
     } else if (p.scope === "all") this.scope = "all";
     else { try { this.scope = localStorage.getItem("scope") || "space"; } catch {} }
     this.input = InputState.new({ placeholder: "Search by name, task or note…" });
-    this.input.on("change", (_e, cx) => { this.filter = this.input.value(); this.sel = null; this.page = 0; cx.notify(); });
-    this.input.on("submit", () => { const pick = (this.lastFlat || [])[this.pickedIndex()]; if (pick) this.open(pick); });
+    this.input.on("change", (_e, cx) => { this.filter = this.input.value(); this.sel = null; this.page = 0; this.csel = 0; cx.notify(); });
+    this.input.on("submit", (_e, cx) => {
+      // Keys and Enter can arrive before the board redraws: act only on what the board shows for the
+      // text in the box now, and otherwise redraw and wait for the next Enter.
+      if (this.input.value() !== this.filter) { this.filter = this.input.value(); this.sel = null; this.page = 0; this.csel = 0; cx.notify(); return; }
+      const pick = (this.lastFlat || [])[this.pickedIndex()];
+      if (pick) this.open(pick);
+      else if (this.making && this.making.name === tabName(this.filter)) this.make(this.making.choices[this.csel] || this.making.choices[0]);
+    });
     this.handle = cx.focus_handle();
     if (this.overlay) this.input.focus();
     if (checking()) return;
     this.migrate();
-    // Commands from keys.json ("Tab finder.focus", ".favorite", ".mute", ".clear"), and "focus" from
+    // Commands from keys.json ("Tab finder.focus", ".favorite", ".mute", ".clear", ".new"), and "focus" from
     // pane.go now that mod.json says the board is focusable.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -212,6 +254,8 @@ export default class TabFinder extends View {
     });
     if (this.overlay) cx.timer.after(300, () => this.input.focus());
     cx.timer.every(60000, (cx) => cx.notify());   // keeps "5 min ago" honest and lets old finishes expire
+    // "In every new space": a light look for new spaces every 2 seconds, while it's on, without redrawing.
+    cx.timer.every(2000, () => { try { if (shared(K.everySpace) === true) this.addToSpaces(this.spaceFacts()); } catch {} });
     cx.spawn(async (cx) => {
       const dir = `${appHome()}/mods/${SELF}`;
       // A file that is missing is fine; one that can't be read as an object is reported on the board.
@@ -496,6 +540,7 @@ export default class TabFinder extends View {
       const tab = this.current();
       if (tab) this.toggle(c === "favorite" ? K.favorites : K.muted, tab.id);
     } else if (c === "clear") { this.input.set_value(""); this.filter = ""; this.chip = "all"; this.sel = null; this.page = 0; }
+    else if (c === "new") this.openNewMenu();
   }
 
   // ---- actions ----
@@ -503,6 +548,143 @@ export default class TabFinder extends View {
     if (tab.space && !tab.space.active) run("space.select", { id: tab.space.id });
     run("tab.select", { id: tab.id });
     if (this.overlay) closeOverlay(this.overlay);
+  }
+  // The space a new tab goes to: this board's own space, else the one in front.
+  target(s) {
+    if (this.scope === "space" && s.home) return s.home;
+    return s.all.find((x) => x.active) || null;
+  }
+  // Herdr's own + menu, as its tab bar opens it, for the space in front. Without one (an older Herdr),
+  // a new terminal tab.
+  openNewMenu() {
+    if (checking()) return;
+    if (this.overlay) closeOverlay(this.overlay);
+    if (this.hasMenu) {
+      try { herdr.openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }); return; } catch {}
+    }
+    const sp = this.target(this.snapshot());
+    run("tab.new", sp ? { space: sp.id } : {});
+  }
+  // The agents Herdr can start on a machine (the + menu's list), asked once a minute at most.
+  agentsOn(machine, cx) {
+    const m = machine || "";
+    const k = this.known[m];
+    if (checking() || typeof herdr.knownAgents !== "function") return [];
+    if (!k || (!k.loading && Date.now() - k.at > AGENTS_TTL)) {
+      const entry = { list: k ? k.list : [], at: Date.now(), loading: true, failed: false };
+      this.known[m] = entry;
+      cx.spawn(async (cx) => {
+        try {
+          const got = await herdr.knownAgents(machine ? { on: machine } : {});
+          entry.list = list(got).filter((a) => a && a.installed && Array.isArray(a.run) && a.run.length && a.name);
+        } catch { entry.failed = true; }
+        entry.loading = false;
+        entry.at = Date.now();
+        cx.notify();
+      });
+    }
+    return this.known[m].list;
+  }
+  make(choice) {
+    const m = this.making;
+    if (!m || !choice || checking()) return;
+    const args = { name: m.name };
+    if (m.target) args.space = m.target.id;
+    if (choice.argv) args.argv = choice.argv;
+    this.input.set_value(""); this.filter = ""; this.sel = null; this.page = 0; this.csel = 0; this.making = null;
+    if (this.overlay) closeOverlay(this.overlay);
+    run("tab.new", args);
+  }
+  // "In every new space": give each space not seen before a board as its first tab. Spaces are marked
+  // as seen before anything is made, so other boards rendering at the same time don't add a second one.
+  // Just what addToSpaces needs, without the work of a full snapshot.
+  spaceFacts() {
+    const all = safe(spaces);
+    const boards = new Set(safe(panes).filter((x) => x.mod === SELF).map((x) => x.tab));
+    const away = new Set(safe(machines).filter((m) => m.name && m.layout === "unavailable").map((m) => m.name));
+    return { all, boards, away };
+  }
+  // Machines that can't take a new tab yet: unreachable, or still connecting.
+  notReady() {
+    return new Set(safe(machines).filter((m) => m.name && m.layout && m.layout !== "ready").map((m) => m.name));
+  }
+  addToSpaces(s) {
+    if (checking() || shared(K.everySpace) !== true) return;
+    const seen = list(shared(K.spacesSeen));
+    // A space on a machine that can't take a tab yet (unreachable, still connecting) waits until it can.
+    const wait = this.notReady();
+    const fresh = s.all.filter((sp) => sp && sp.id && !seen.includes(sp.id) && !(sp.machine && wait.has(sp.machine)));
+    const now = Date.now();
+    if (fresh.length) {
+      // Spaces that are gone are forgotten only past 1000, and spaces still here are always kept, so a
+      // board someone closed never comes back. (A machine that dropped off lists its spaces again later.)
+      const here = new Set(s.all.map((sp) => sp.id));
+      let ids = [...seen, ...fresh.map((sp) => sp.id)];
+      if (ids.length > 1000) {
+        let drop = ids.length - 1000;
+        ids = ids.filter((id) => (drop > 0 && !here.has(id) ? (drop--, false) : true));
+      }
+      setShared(K.spacesSeen, ids);
+      // Look again just before adding: another copy may have added one since this one looked.
+      const boards = new Set(safe(panes).filter((x) => x.mod === SELF).map((x) => x.tab));
+      const moves = { ...(shared(K.moveFirst) || {}) };
+      for (const sp of fresh) {
+        const live = safe(spaces).find((x) => x.id === sp.id) || sp;
+        if (live.tabs.some((t) => boards.has(t.id))) continue;
+        try {
+          run("tab.new", { space: sp.id, name: BOARD_NAME, mod: SELF, props: { space: sp.id }, focus: false });
+          moves[sp.id] = now;
+        } catch {}
+      }
+      setShared(K.moveFirst, moves);
+    }
+    // A board just added goes last; once it shows, any copy moves it to the front (tab.move counts from 1).
+    const pending = shared(K.moveFirst);
+    if (pending && typeof pending === "object" && Object.keys(pending).length) {
+      const left = {};
+      for (const [id, at] of Object.entries(pending)) {
+        const sp = s.all.find((x) => x.id === id);
+        const tab = sp && sp.tabs.find((t) => s.boards.has(t.id));
+        if (tab) { if (sp.tabs[0] !== tab) { try { run("tab.move", { id: tab.id, index: 1 }); } catch {} } }
+        else if (sp && now - Number(at) < 15000) left[id] = at;
+      }
+      if (Object.keys(left).length !== Object.keys(pending).length) setShared(K.moveFirst, left);
+    }
+  }
+  // Turning it on: everything already here counts as seen unless `existing`, which adds a board to
+  // every space that has none.
+  setEverySpace(on, existing, s) {
+    this.asking = false;
+    if (!on) { setShared(K.everySpace, false); return; }
+    setShared(K.spacesSeen, existing ? [] : s.all.map((sp) => sp.id));
+    setShared(K.everySpace, true);
+  }
+  // Spaces with no board that one could be added to now.
+  withoutBoard(s) {
+    const wait = this.notReady();
+    return s.all.filter((sp) => !sp.tabs.some((x) => s.boards.has(x.id)) && !(sp.machine && wait.has(sp.machine))).length;
+  }
+  everySpaceSwitch(t, s) {
+    const on = shared(K.everySpace) === true;
+    const without = this.withoutBoard(s);
+    return this.pill(t, on ? "In every new space: on" : "In every new space: off", null, on, "tf-every", () => {
+      if (on) this.setEverySpace(false, false, s);
+      else if (without > 0) this.asking = !this.asking;
+      else this.setEverySpace(true, false, s);
+    }).accessibility_label(`In every new space, ${on ? "on" : "off"}: give each new space a "${BOARD_NAME}" tab first`)
+      .tooltip(on
+        ? `Every new space gets a "${BOARD_NAME}" tab first. Click to stop; the ones already added stay.`
+        : `Give every new space a "${BOARD_NAME}" tab as its first tab`);
+  }
+  everySpaceQuestion(t, s) {
+    const without = this.withoutBoard(s);
+    return h_flex().flex_none().gap(8).items_center().flex_wrap().px(12).py(8).rounded(10)
+      .border_1().border_color(t.accent).bg(alpha(t.accent, 0.08))
+      .child(div().text_size(12).text_color(t.foreground)
+        .child(`New spaces will get a "${BOARD_NAME}" tab first. Add one to the ${plural(without, "space")} without one too?`))
+      .child(this.pill(t, `Yes, add ${without === 1 ? "it" : "them"}`, null, true, "tf-every-all", () => this.setEverySpace(true, true, s)))
+      .child(this.pill(t, "No, only new spaces", null, false, "tf-every-new", () => this.setEverySpace(true, false, s)))
+      .child(this.pill(t, "Cancel", null, false, "tf-every-no", () => { this.asking = false; }));
   }
   toggle(key, id) {
     const f = list(shared(key));
@@ -664,6 +846,7 @@ export default class TabFinder extends View {
       // Recent: whatever tab is in front, opened from here or anywhere else.
       const f = focused();
       if (f && f.tab && !s.boards.has(f.tab) && f.tab !== this.lastSeen) { this.lastSeen = f.tab; this.noteRecent(f.tab); }
+      try { this.addToSpaces(s); } catch {}
       // Put the cursor in the search box each time this tab comes to the front.
       if (!this.overlay && sp) {
         const shown = sp.tabs.find((x) => x.active);
@@ -691,6 +874,36 @@ export default class TabFinder extends View {
       secs.push({ ...x, tabs });
     }
     const flat = secs.flatMap((x) => x.tabs);
+    // A search that matches no tab: offer to make one named after it, in this board's space (or the one
+    // in front), as a terminal or any agent Herdr knows is installed there.
+    const q = tabName(this.filter);
+    let offer = null;
+    if (q && total === 0 && this.chip === "all" && !checking()) {
+      const target = this.target(s);
+      const machine = target && target.machine ? target.machine : null;
+      const away = !!(machine && s.away.has(machine));
+      const choices = away ? [] : [{ key: "terminal", name: "Terminal", icon: "icons/shell.svg", tint: true, argv: null },
+        ...this.agentsOn(machine, cx).map((a) => ({ key: a.key, name: a.name, icon: a.icon, tint: !!a.tint, argv: a.run }))];
+      const k = this.known[machine || ""];
+      // A board showing one space: say when other spaces have tabs that match.
+      let elsewhere = 0;
+      if (this.scope === "space") {
+        const words = fold(q).split(/\s+/);
+        for (const sp of s.all) {
+          if (target && sp.id === target.id) continue;
+          for (const t of sp.tabs) {
+            if (s.boards.has(t.id)) continue;
+            const h = fold(`${this.label(s, { ...t, space: sp })} ${t.name || ""} ${sp.name || ""}`);
+            if (words.every((w) => h.includes(w))) elsewhere++;
+          }
+        }
+      }
+      offer = { name: q, target, choices, away, machine, elsewhere,
+        loading: !away && !!(k && k.loading && !k.list.length), failed: !away && !!(k && k.failed && !k.list.length) };
+    }
+    this.making = offer && offer.choices.length ? offer : null;
+    const making = this.making;
+    if (making && this.csel >= making.choices.length) this.csel = making.choices.length - 1;
     const before = this.page * MAX_CARDS;
     const after = total - before - flat.length;
     this.lastFlat = flat;
@@ -736,6 +949,7 @@ export default class TabFinder extends View {
     // The popup's list: as tall as its rows, never taller than POPUP_LIST_MAX (then it scrolls).
     const contentH = rows.length
       ? rows.reduce((h, r) => h + (r.page ? 30 : r.head ? HEAD_H + (r.first ? 0 : 8) : CARD_H), 0) + GAP * (rows.length - 1) + 12
+      : offer ? 40 + offer.choices.length * (ROW_H + GAP) + (offer.loading || offer.failed ? 16 + GAP : 0) + (offer.elsewhere ? 18 : 0)
       : 40;
     const listH = Math.max(Math.min(96, contentH), Math.min(this.listCap, POPUP_LIST_MAX, contentH));
     this.lastListH = listH;
@@ -780,6 +994,38 @@ export default class TabFinder extends View {
     // Moving down reveals the card's row (and the "Next page" line under the last one); moving up also
     // reveals the section title or "Previous page" line above it. scroll_to_item scrolls as little as it
     // can, so revealing a title when moving down would leave the card itself below the view.
+    const shortName = [...q].length > 60 ? [...q].slice(0, 59).join("") + "…" : q;
+    const image = typeof kit.image === "function" ? kit.image : null;
+    const makeIcon = (c) => {
+      try {
+        if (c.icon && c.tint) return svg(c.icon).size(15).flex_none().text_color(t.foreground);
+        if (c.icon && image) return image(c.icon).size(15).flex_none();
+      } catch {}
+      return div().w(15).flex_none().text_size(12).font_bold().text_color(t.muted).child(([...c.name][0] || "?").toUpperCase());
+    };
+    const makeRow = (c, i) => h_flex().id(`tf-make-${i}`).h(ROW_H).flex_none().w_full().max_w(520).px(10).gap(10)
+      .items_center().rounded(8).border_1()
+      .border_color(i === this.csel ? t.accent : t.border)
+      .bg(i === this.csel ? alpha(t.accent, 0.13) : t.surface)
+      .role("list_box_option").aria_selected(i === this.csel).when(i === this.csel, (el) => el.aria_active_descendant())
+      .accessibility_label(c.argv ? `New tab named ${q}, running ${c.name}` : `New terminal tab named ${q}`)
+      .tooltip(c.argv ? `Start ${c.name} in a new tab named "${wrap(q, 56, 200)}"` : `Open a terminal in a new tab named "${wrap(q, 56, 200)}"`)
+      .cursor_pointer().hover((st) => st.bg(t.hover))
+      .on_click((_e, cx) => { this.csel = i; this.make(c); cx.notify(); })
+      .child(makeIcon(c))
+      .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(t.foreground).child(c.name))
+      .child(div().flex_none().text_size(11).text_color(t.dim).child(i === this.csel ? "Enter" : ""));
+    // The offer's rows sit straight in the scrolling list (child 0 is its line), so the keys can scroll to them.
+    const offerRows = (el) => el
+      .child(div().text_size(12.5).text_color(t.muted).child(offer.away
+        ? `Nothing matches "${shortName}", and ${offer.machine} can't be reached, so a new tab can't start there right now.`
+        : offer.elsewhere
+          ? `Nothing here matches "${shortName}", but ${plural(offer.elsewhere, "tab")} in ${offer.elsewhere === 1 ? "another space does" : "other spaces do"} (${this.overlay ? "turn off This space only" : "click Show all spaces"} to see ${offer.elsewhere === 1 ? "it" : "them"}). Or make a new tab with that name here:`
+          : `Nothing matches "${shortName}". Make a new tab with that name${offer.target && offer.target.name ? ` in ${offer.target.name}` : ""}:`))
+      .children(offer.choices.map((c, i) => makeRow(c, i)))
+      .when(offer.loading, (el) => el.child(div().text_size(11.5).text_color(t.dim).child("Checking which agents are installed…")))
+      .when(offer.failed, (el) => el.child(div().text_size(11.5).text_color(t.dim).child("Couldn't check which agents are installed; the + button has Herdr's full list.")));
+
     const reveal = (i, down) => {
       const pos = where[i];
       if (!pos) return;
@@ -859,6 +1105,11 @@ export default class TabFinder extends View {
           if (this.filter || this.chip !== "all" || this.sel !== null || this.page) { this.input.set_value(""); this.filter = ""; this.chip = "all"; this.sel = null; this.page = 0; }
           else if (this.overlay) { closeOverlay(this.overlay); return; }
           else return;
+        } else if (making && !flat.length && ["down", "up", "pagedown", "pageup"].includes(k)) {
+          const n = making.choices.length;
+          const step = k === "down" ? 1 : k === "up" ? -1 : k === "pagedown" ? 4 : -4;
+          this.csel = Math.max(0, Math.min(n - 1, this.csel + step));
+          this.scroll.scroll_to_item(this.csel + 1);
         } else if (["down", "up", "pagedown", "pageup"].includes(k) || (["left", "right"].includes(k) && this.caretAllows(k))) {
           if (!move(k)) return;
         } else return;
@@ -879,10 +1130,18 @@ export default class TabFinder extends View {
         .child(svg(ICON("search")).size(16).flex_none().text_color(t.dim))
         .child(Input.new(this.input).flex_1().h_full().text_size(13.5).text_color(t.foreground))
         .when(!narrow, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim)
-          .child(this.overlay ? "Enter to open, Esc to close" : this.filter ? "Esc to clear" : "Arrow keys to move, Enter to open"))))
+          .child(making ? "Enter to make it" : this.overlay ? "Enter to open, Esc to close" : this.filter ? "Esc to clear" : "Arrow keys to move, Enter to open")))
+        .child(div().id("tf-new").flex_none().p(4).rounded(6)
+          .role("button").accessibility_label("New tab")
+          .tooltip(this.hasMenu ? "New tab: a terminal, an agent, a space or a worktree" : "New terminal tab")
+          .text_color(t.muted).cursor_pointer()
+          .hover((st) => st.text_color(t.foreground).bg(t.raised))
+          .on_click((_e, cx) => { cx.stop_propagation(); this.openNewMenu(); })
+          .child(svg(ICON("plus")).size(15))))
       .child(v_flex().id("tf-scroll").when(sized, (el) => el.h(listH).flex_none()).when(!sized, (el) => el.flex_1()).min_h(0).overflow_y_scrollbar().track_scroll(this.scroll).gap(GAP).pb(12)
         .role("list_box").accessibility_label(this.filter ? "Search results" : "Tabs")
-        .when(flat.length === 0, (el) => el.child(div().text_size(12.5).text_color(t.muted).child(empty)))
+        .when(flat.length === 0 && !offer, (el) => el.child(div().text_size(12.5).text_color(t.muted).child(empty)))
+        .when(flat.length === 0 && !!offer, offerRows)
         .children(rows.map((row, ri) => row.page
           ? h_flex().id(`tf-page-${row.page}`).flex_none().gap(10).items_center().flex_wrap()
               .when(row.page === "next", (el) => el.pt(4))
@@ -896,11 +1155,14 @@ export default class TabFinder extends View {
               .text_color(row.loud ? t.foreground : t.muted).child(row.head)
           : h_flex().id(`tfr-${ri}`).flex_none().gap(GAP).items_start()
               .children(row.cards.map(([tab, i]) => this.safeCard(t, s, tab, i, row.key, w, row.where))))))
+      .when(this.asking, (el) => el.child(this.everySpaceQuestion(t, s)))
       .when(this.problems.length > 0, (el) => el.child(v_flex().flex_none().gap(2)
         .children(this.problems.map((x, i) => div().id(`tf-problem-${i}`).text_size(11).text_color(t.blocked).child(x)))))
       .child(h_flex().flex_none().items_center().justify_between().gap(12).flex_wrap()
         .when(!narrow && !short, (el) => el.child(div().text_size(10.5).text_color(t.dim)
           .child("Star a tab to keep it in Favorites (Ctrl+S). The bell mutes its new output (Ctrl+M).")))
-        .child(this.credit(t)));
+        .child(h_flex().gap(8).items_center().flex_wrap()
+          .when(!checking(), (el) => el.child(this.everySpaceSwitch(t, s)))
+          .child(this.credit(t))));
   }
 }

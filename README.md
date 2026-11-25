@@ -33,6 +33,8 @@ and more) and with plain terminals, side by side.
   their own and never nag; a bell mutes anything else.
 - 🧭 **The whole fleet at a glance.** One card per tab, named as your tab bar names it: its status, how
   long it's been working, how many agents and helpers run in it, and what the agent says it's doing.
+- ➕ **Find it, or make it.** Search for a tab that isn't there and press Enter: a new tab with that
+  name opens, as a terminal or any agent you have installed. The + button opens Herdr's own new-tab menu.
 - ⭐ **Favorites and recent tabs** right at the top, across every layout.
 - 🖥️ **Every space, every machine.** Tabs on your servers are labelled; one that goes offline is marked,
   not hidden.
@@ -111,6 +113,8 @@ floating block of your own layout.
 | ↑ ↓, Page Up, Page Down | Move between cards (past the last one: the next page) |
 | ← → | Move between cards (while searching, from either end of the text) |
 | Enter | Open the selected card, or the first result |
+| Enter, when nothing matches | Make a new tab named after your search (↑ ↓ to pick a terminal or an agent) |
+| + beside the search | Herdr's new-tab menu: a terminal, an agent, a space or a worktree |
 | Ctrl+S | Star or unstar the selected card |
 | Ctrl+M | Mute or unmute its new output |
 | Esc | Clear the search; in the popup, close it |
@@ -121,9 +125,21 @@ floating block of your own layout.
 <summary><b>Bind Tab finder's own commands</b></summary>
 
 Under a `"mod:Tab finder"` section of `keys.json` (active while the board has the keyboard):
-`"Tab finder.favorite"`, `"Tab finder.mute"`, `"Tab finder.clear"`, and `"Tab finder.focus"`, which puts
-the cursor in the search box. `pane.go` also moves onto a board pane.
+`"Tab finder.favorite"`, `"Tab finder.mute"`, `"Tab finder.clear"`, `"Tab finder.new"` (the new-tab
+menu), and `"Tab finder.focus"`, which puts the cursor in the search box. `pane.go` also moves onto a board pane.
 </details>
+
+**Make a tab from a search.** When nothing matches what you typed, the board offers to make a tab with
+that name in its space (the popup: the space you're in). Enter makes a terminal; ↑ ↓ or a click picks
+one of your agents instead. The agents are the ones Herdr's + menu offers and finds installed, so any agent
+you add to Herdr shows up here too.
+
+<p align="center"><img src="docs/make.png" alt="Searching for 'billing refactor' finds nothing, so the board offers to make a tab with that name: a terminal, Claude Code, Codex, OpenCode or Gemini." width="100%"></p>
+
+**In every new space.** The switch at the bottom of the board (off at first) gives every space you make
+from then on a Tab finder tab as its first tab. When you turn it on, it asks whether to add one to the
+spaces you already have, too. Turning it off leaves the boards already added; close any of them like a
+normal tab, and it won't come back.
 
 ## Make it yours
 
@@ -169,13 +185,15 @@ A board tab also takes props, which win over config.json: `{"space": "Agents"}` 
 <summary><b>Privacy, data, rollout and support</b></summary>
 
 - **Privacy.** Tab finder reads only Herdr's own view of your spaces, tabs and agents, plus its two
-  optional files. It never reaches the network, reads other files or sends telemetry. Its only actions
-  are selecting the tab you pick and saving its own state; the one program it can start is your system's
-  link opener, when you click its credit to open this page. See [SECURITY.md](SECURITY.md).
+  optional files. It never reaches the network, reads other files or sends telemetry. It acts only when
+  you ask: it selects the tab you pick, makes the tab you ask for (a terminal or an agent from Herdr's own
+  list), adds its board to new spaces when you turn that on, and saves its own state. The one program it
+  starts itself is your system's link opener, when you click its credit to open this page. See
+  [SECURITY.md](SECURITY.md).
 - **Data.** Favorites, mutes, recent tabs and recent finishes live in Herdr's `shared.json` under
   `tabfinder.*`, on each computer. They don't sync between computers.
 - **Rollout.** The installers run unattended, are safe to rerun, and exit 0 (done), 1 (failed) or
-  2 (bad option). Pin a version with `TAB_FINDER_REF=v1.1.1` (`-Ref`), install from an internal mirror
+  2 (bad option). Pin a version with `TAB_FINDER_REF=v1.2.0` (`-Ref`), install from an internal mirror
   with `TAB_FINDER_URL=https://…/tab-finder.tar.gz` (`-Url`), choose another folder name with
   `TAB_FINDER_NAME` (`-Name`), and point at a custom Herdr folder with `HERDR_APP_HOME` (`-AppHome`).
 - **Quality.** Every change, and every Monday against the newest Herdr, CI loads the mod in Herdr and
@@ -193,6 +211,10 @@ A board tab also takes props, which win over config.json: `{"space": "Agents"}` 
   is open somewhere: keep one as a tab (it keeps counting in the background while you work elsewhere).
   With only the popup, it sees just what has finished each time you open it.
 - A tab holding a Tab finder pane isn't listed on its own board.
+- "In every new space" is carried out by Tab finder itself, since Herdr doesn't tell mods when a space is
+  made. Any board you've opened since Herdr started (or the popup, while open) does it; spaces made before
+  that get their board as soon as one opens. With two screens on the same machine both set to it, a new
+  space can now and then get two boards; close one and it stays closed.
 - Adding a shortcut makes `keys.json` yours, and Herdr then stops adding new default shortcuts to it.
   That's Herdr's rule for any edit to the file.
 - With hundreds of tabs, Tab finder shows 100 cards per page to stay within Herdr's drawing budget;

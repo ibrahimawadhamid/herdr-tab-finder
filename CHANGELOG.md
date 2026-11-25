@@ -1,7 +1,17 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-11-25)
 
+- **Find it, or make it.** When a search matches no tab, the board offers to make one with that name in
+  its space: Enter for a terminal, or pick any agent you have installed. The agents come from Herdr's own
+  list (the same one its + menu shows), so new agents appear without a Tab finder update.
+- **A + button** beside the search opens Herdr's own new-tab menu (terminal, agents, new space, worktrees),
+  from the board or the popup. `"Tab finder.new"` opens it from keys.json. On a Herdr without that menu,
+  it opens a new terminal tab.
+- **In every new space** (off by default): a switch at the bottom of the board gives every new space a Tab
+  finder tab as its first tab, and can add one to your existing spaces when you turn it on. A board you
+  close stays closed.
+- Long tab names made from a search are cut at a word, at 120 characters.
 - The installers only say "Press <key>" when the shortcut is really in place. If keys.json is missing,
   isn't valid JSON, or the key is taken, they say so plainly and point to the other ways to open it.
 

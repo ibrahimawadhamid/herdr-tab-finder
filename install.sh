@@ -19,7 +19,7 @@
 # copied), 2 bad option.
 set -eu
 
-VERSION=1.1.1
+VERSION=1.2.0
 REPO=ibrahimawadhamid/herdr-tab-finder
 
 say() { printf '%s\n' "$*"; }
